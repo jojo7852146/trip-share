@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>旅行共享 · Trip Share</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .tab-active { color: #4f46e5; border-bottom-color: #4f46e5; }
+  .scroll-x { overflow-x: auto; scrollbar-width: thin; }
+  .scroll-x::-webkit-scrollbar { height: 4px; }
+  .scroll-x::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  .balance-pos { color: #059669; }
+  .balance-neg { color: #dc2626; }
+  .balance-zero { color: #6b7280; }
+  .img-thumb { aspect-ratio: 16/9; object-fit: cover; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div id="app"></div>
+
+<!-- Modal container -->
+<div id="modal-root"></div>
+
+<script>
+// ========== Globals & helpers =====================================
+const API_BASE = "";  // same origin
+const LS_TOKEN = "trip_token";
+const LS_USER = "trip_user";
+const LS_TRIP_ID = "trip_current_id";
+
+function getToken() { return localStorage.getItem(LS_TOKEN); }
+function getUser() { try { return JSON.parse(localStorage.getItem(LS_USER) || "null"); } catch { return null; } }
+function setSession(token, user) {
+  localStorage.setItem(LS_TOKEN, token);
+  localStorage.setItem(LS_USER, JSON.stringify(user));
+}
+function clearSession() {
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_USER);
+  localStorage.removeItem(LS_TRIP_ID);
+}
+
+async function api(path, opts = {}) {
+  const headers = { "Content-Type": "application/json" };
+  const tk = getToken();
+  if (tk) headers["Authorization"] = `Bearer ${tk}`;
+  const res = await fetch(API_BASE + path, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
+  const data = await res.json().catch(() => ({ ok: false, error: "解析失败" }));
+  if (!res.ok || data.ok === false) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+function fmtDate(s) {
+  if (!s) return "";
+  return s.slice(0, 10);
+}
+
+function fmtDateTime(s) {
+  if (!s) return "";
+  return s.replace("T", " ").slice(0, 16);
+}
+
+function copyToClipboard(text) {
+  navigator.clipboard?.writeText(text).then(
+    () => toast("已复制到剪贴板", "success"),
+    () => toast("复制失败", "error")
+  );
+}
+
+// ========== Toast =================================================
+function toast(msg, type = "info") {
+  const root = document.getElementById("modal-root");
+  const colors = {
+    success: "bg-emerald-500",
+    error: "bg-red-500",
+    info: "bg-slate-700",
+    warning: "bg-amber-500",
+  };
+  const el = document.createElement("div");
+  el.className = `fixed top-4 right-4 z-50 ${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// ========== Modal =================================================
+function showModal(html) {
+  const root = document.getElementById("modal-root");
+  root.innerHTML = `
+    <div class="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4" onclick="if(event.target===this) closeModal()">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+        ${html}
+      </div>
+    </div>`;
+}
+function closeModal() {
+  document.getElementById("modal-root").innerHTML = "";
+}
+
+// ========== Auth pages ============================================
+function renderAuth(mode) {
+  document.getElementById("app").innerHTML = `
+    <div class="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-indigo-50 via-white to-emerald-50">
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <div class="text-center mb-6">
+          <div class="text-5xl mb-2">🌴</div>
+          <h1 class="text-2xl font-bold text-slate-800">旅行共享</h1>
+          <p class="text-slate-500 text-sm mt-1">${mode === "login" ? "登录账号继续" : "创建账号加入你的朋友"}</p>
+        </div>
+        <form id="auth-form" class="space-y-4">
+          ${mode === "register" ? `
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">昵称（显示给朋友看的）</label>
+            <input name="display_name" type="text" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none" placeholder="比如：Jojo" />
+          </div>` : ""}
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">用户名（小写字母/数字/下划线，3-20位）</label>
+            <input name="username" type="text" autocomplete="username" required class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none" placeholder="比如：jojo123" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">密码（至少 6 位）</label>
+            <input name="password" type="password" autocomplete="${mode === "login" ? "current-password" : "new-password"}" required minlength="6" class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none" />
+          </div>
+          <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium">
+            ${mode === "login" ? "登录" : "注册"}
+          </button>
+        </form>
+        <p class="text-center text-sm text-slate-500 mt-4">
+          ${mode === "login" ? "还没账号？" : "已有账号？"}
+          <a href="#" onclick="renderAuth('${mode === "login" ? "register" : "login"}');return false;" class="text-indigo-600 hover:underline">
+            ${mode === "login" ? "注册" : "登录"}
+          </a>
+        </p>
+      </div>
+    </div>
+  `;
+  document.getElementById("auth-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {
+      username: fd.get("username"),
+      password: fd.get("password"),
+      display_name: fd.get("display_name") || undefined,
+    };
+    try {
+      const path = mode === "login" ? "/api/login" : "/api/register";
+      const data = await api(path, { method: "POST", body: JSON.stringify(body) });
+      setSession(data.token, data.user);
+      toast(mode === "login" ? `欢迎回来，${data.user.display_name}` : `账号已创建，欢迎 ${data.user.display_name}`, "success");
+      renderApp();
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+}
+
+// ========== Main app ==============================================
+let state = {
+  trips: [],
+  currentTrip: null,
+  members: [],
+  activeTab: "overview",
+  wishlist: [],
+  itinerary: [],
+  hotels: [],
+  meetings: [],
+  expenses: [],
+  balances: [],
+  groups: [],
+};
+
+async function loadTrip(tripId) {
+  try {
+    const data = await api(`/api/trips/${tripId}`);
+    state.currentTrip = data.trip;
+    state.members = data.members;
+    localStorage.setItem(LS_TRIP_ID, tripId);
+    await Promise.all([loadTabData(), loadGroups()]);
+  } catch (err) {
+    toast(err.message, "error");
+    if (err.message.includes("不是")) {
+      localStorage.removeItem(LS_TRIP_ID);
+      state.currentTrip = null;
+    }
+  }
+}
+
+async function loadGroups() {
+  if (!state.currentTrip) return;
+  const data = await api(`/api/trips/${state.currentTrip.id}/expense-groups`);
+  state.groups = data.groups;
+}
+
+async function loadTabData() {
+  const t = state.currentTrip;
+  if (!t) return;
+  const [w, it, h, m, e] = await Promise.all([
+    api(`/api/trips/${t.id}/wishlist`),
+    api(`/api/trips/${t.id}/itinerary`),
+    api(`/api/trips/${t.id}/hotels`),
+    api(`/api/trips/${t.id}/meetings`),
+    api(`/api/trips/${t.id}/expenses`),
+  ]);
+  state.wishlist = w.items;
+  state.itinerary = it.items;
+  state.hotels = h.items;
+  state.meetings = m.items;
+  state.expenses = e.items;
+  state.balances = e.balances;
+}
+
+async function renderApp() {
+  const user = getUser();
+  if (!user) return renderAuth("login");
+  if (!getToken()) return renderAuth("login");
+
+  // 加载旅行列表
+  try {
+    const data = await api("/api/trips");
+    state.trips = data.trips;
+  } catch (err) {
+    if (err.message.includes("未登录")) {
+      clearSession();
+      return renderAuth("login");
+    }
+    toast(err.message, "error");
+  }
+
+  // 加载当前旅行
+  const savedId = localStorage.getItem(LS_TRIP_ID);
+  if (savedId && state.trips.some(t => t.id == savedId)) {
+    await loadTrip(parseInt(savedId));
+  } else {
+    state.currentTrip = null;
+    localStorage.removeItem(LS_TRIP_ID);
+  }
+
+  document.getElementById("app").innerHTML = `
+    ${renderTopBar(user)}
+    ${state.currentTrip ? renderTripView() : renderTripListView()}
+  `;
+}
+
+function renderTopBar(user) {
+  return `
+    <div class="bg-white shadow-sm sticky top-0 z-30">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🌴</span>
+          <span class="font-bold text-slate-800">旅行共享</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-slate-600">${escapeHtml(user.display_name)}</span>
+          <button onclick="logout()" class="text-sm text-slate-500 hover:text-red-600">退出</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function logout() {
+  clearSession();
+  state = {
+    trips: [], currentTrip: null, members: [], activeTab: "overview",
+    wishlist: [], itinerary: [], hotels: [], meetings: [], expenses: [], balances: [], groups: []
+  };
+  renderAuth("login");
+}
+
+// ========== Trip list view ========================================
+function renderTripListView() {
+  const tripsHtml = state.trips.length === 0
+    ? `<div class="text-center text-slate-400 py-12">还没有旅行，创建一个或加入一个朋友的旅行</div>`
+    : `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${state.trips.map(t => `
+          <div onclick="enterTrip(${t.id})" class="bg-white rounded-xl shadow-sm hover:shadow-md transition cursor-pointer overflow-hidden border border-slate-100">
+            ${t.cover_image
+              ? `<img src="${escapeHtml(t.cover_image)}" class="w-full img-thumb" onerror="this.style.display='none'" />`
+              : `<div class="w-full img-thumb bg-gradient-to-br from-indigo-200 to-emerald-200 flex items-center justify-center text-5xl">✈️</div>`}
+            <div class="p-4">
+              <h3 class="font-bold text-slate-800 text-lg">${escapeHtml(t.name)}</h3>
+              <p class="text-sm text-slate-500 mt-1">
+                ${escapeHtml(t.start_date || "未设定")} → ${escapeHtml(t.end_date || "未设定")}
+              </p>
+              <p class="text-xs text-slate-400 mt-2">${escapeHtml(t.description || "")}</p>
+              <div class="mt-2 text-xs text-slate-500">
+                邀请码：<code class="bg-slate-100 px-1.5 py-0.5 rounded">${escapeHtml(t.invite_code)}</code>
+              </div>
+            </div>
+          </div>
+        `).join("")}
+      </div>`;
+
+  return `
+    <div class="max-w-5xl mx-auto px-4 py-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 class="text-xl font-bold text-slate-800">我的旅行</h2>
+        <div class="flex gap-2">
+          <button onclick="showJoinTripModal()" class="bg-white border border-slate-300 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-medium text-slate-700">
+            🚪 加入旅行
+          </button>
+          <button onclick="showCreateTripModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            ➕ 新建旅行
+          </button>
+        </div>
+      </div>
+      ${tripsHtml}
+    </div>
+  `;
+}
+
+async function enterTrip(id) {
+  await loadTrip(id);
+  renderApp();
+}
+
+function showCreateTripModal() {
+  showModal(`
+    <form id="create-trip-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">创建新旅行</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">名称</label>
+          <input name="name" required maxlength="60" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：国庆日本京都 5 日游" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">简介（可选）</label>
+          <textarea name="description" rows="2" maxlength="200" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="简单介绍一下这次旅行"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">开始日期</label>
+            <input name="start_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm text-slate-600 mb-1">结束日期</label>
+            <input name="end_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">封面图 URL（可选）</label>
+          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("create-trip-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const data = await api("/api/trips", { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      toast(`旅行创建完成！邀请码：${data.invite_code}`, "success", 6000);
+      await renderApp();
+      enterTrip(data.trip.id);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+}
+
+function showJoinTripModal() {
+  showModal(`
+    <form id="join-trip-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">加入朋友的旅行</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">邀请码</label>
+          <input name="invite_code" required maxlength="20" class="w-full border border-slate-300 rounded-lg px-3 py-2 uppercase tracking-wider" placeholder="比如：A1B2C3D4" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">加入</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("join-trip-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const data = await api("/api/trips/join", { method: "POST", body: JSON.stringify({ invite_code: fd.get("invite_code") }) });
+      closeModal();
+      toast(`已加入：${data.trip_name}`, "success");
+      await renderApp();
+      enterTrip(data.trip_id);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  };
+}
+
+// ========== Trip detail view ======================================
+function renderTripView() {
+  const t = state.currentTrip;
+  const tabs = [
+    ["overview", "📋 概览"],
+    ["wishlist", "⭐ 想去"],
+    ["itinerary", "🗓️ 行程"],
+    ["hotels", "🏨 酒店"],
+    ["meetings", "📍 集合"],
+    ["expenses", "💰 费用"],
+    ["members", "👥 成员"],
+  ];
+  const activeContent = {
+    overview: renderOverviewTab(),
+    wishlist: renderWishlistTab(),
+    itinerary: renderItineraryTab(),
+    hotels: renderHotelsTab(),
+    meetings: renderMeetingsTab(),
+    expenses: renderExpensesTab(),
+    members: renderMembersTab(),
+  }[state.activeTab];
+
+  return `
+    <div class="max-w-5xl mx-auto px-4 py-4">
+      <!-- Trip header -->
+      <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <button onclick="leaveTrip()" class="text-sm text-slate-500 hover:text-slate-700 mb-1">← 返回旅行列表</button>
+            <h2 class="text-2xl font-bold text-slate-800">${escapeHtml(t.name)}</h2>
+            <p class="text-sm text-slate-500 mt-1">
+              ${escapeHtml(t.start_date || "未设定")} → ${escapeHtml(t.end_date || "未设定")}
+              · ${state.members.length} 位成员
+            </p>
+            ${t.description ? `<p class="text-sm text-slate-600 mt-2">${escapeHtml(t.description)}</p>` : ""}
+          </div>
+          <div class="text-right">
+            <div class="text-xs text-slate-500 mb-1">邀请码</div>
+            <div class="flex items-center gap-2">
+              <code class="bg-slate-100 px-3 py-1.5 rounded font-mono text-lg tracking-wider">${escapeHtml(t.invite_code)}</code>
+              <button onclick="copyToClipboard('${escapeHtml(t.invite_code)}')" class="text-slate-500 hover:text-slate-700" title="复制">📋</button>
+              <button onclick="regenerateInvite()" class="text-slate-500 hover:text-slate-700" title="重新生成">🔄</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="bg-white rounded-xl shadow-sm mb-4">
+        <div class="scroll-x border-b border-slate-200">
+          <div class="flex">
+            ${tabs.map(([k, label]) => `
+              <button onclick="switchTab('${k}')" class="px-4 py-3 text-sm whitespace-nowrap border-b-2 transition ${
+                state.activeTab === k ? "tab-active font-medium" : "border-transparent text-slate-500 hover:text-slate-700"
+              }">${label}</button>
+            `).join("")}
+          </div>
+        </div>
+        <div class="p-4">${activeContent}</div>
+      </div>
+    </div>
+  `;
+}
+
+function leaveTrip() {
+  state.currentTrip = null;
+  state.members = [];
+  localStorage.removeItem(LS_TRIP_ID);
+  renderApp();
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  renderApp();
+}
+
+async function regenerateInvite() {
+  if (!confirm("确定要重新生成邀请码吗？旧码将失效。")) return;
+  try {
+    const data = await api(`/api/trips/${state.currentTrip.id}/invite`, { method: "POST" });
+    state.currentTrip.invite_code = data.invite_code;
+    toast(`新邀请码：${data.invite_code}`, "success", 6000);
+    renderApp();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+// ========== Tab: Overview =========================================
+function renderOverviewTab() {
+  const t = state.currentTrip;
+  const stats = [
+    { label: "想去", count: state.wishlist.length, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "行程项", count: state.itinerary.length, color: "text-indigo-600", bg: "bg-indigo-50" },
+    { label: "酒店", count: state.hotels.length, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "集合点", count: state.meetings.length, color: "text-rose-600", bg: "bg-rose-50" },
+    { label: "费用笔数", count: state.expenses.length, color: "text-emerald-600", bg: "bg-emerald-50" },
+    { label: "群组", count: state.groups.length, color: "text-slate-600", bg: "bg-slate-100" },
+  ];
+  return `
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      ${stats.map(s => `
+        <div class="rounded-xl ${s.bg} p-4">
+          <div class="text-sm text-slate-600">${s.label}</div>
+          <div class="text-2xl font-bold ${s.color} mt-1">${s.count}</div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="mt-4 text-sm text-slate-600 bg-blue-50 border border-blue-100 rounded-lg p-3">
+      💡 分享邀请码 <code class="bg-white px-1.5 py-0.5 rounded font-mono">${escapeHtml(t.invite_code)}</code> 给朋友，他们注册账号后就能加入这次旅行。
+    </div>
+  `;
+}
+
+// ========== Tab: Wishlist =========================================
+function renderWishlistTab() {
+  const items = state.wishlist;
+  return `
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-slate-500">收藏想去的地方、餐厅、景点路线，可附链接和图片</p>
+      <button onclick="showWishlistForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 新增</button>
+    </div>
+    ${items.length === 0
+      ? `<div class="text-center text-slate-400 py-8">还没有想去的地方</div>`
+      : `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${items.map(w => `
+            <div class="bg-white border border-slate-200 rounded-xl overflow-hidden">
+              ${w.image_url
+                ? `<img src="${escapeHtml(w.image_url)}" class="w-full img-thumb" onerror="this.outerHTML='<div class=&quot;w-full img-thumb bg-slate-100&quot;></div>'" />`
+                : `<div class="w-full img-thumb bg-slate-100"></div>`}
+              <div class="p-3">
+                <div class="flex items-start justify-between gap-2">
+                  <h4 class="font-medium text-slate-800">${escapeHtml(w.title)}</h4>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 whitespace-nowrap">${escapeHtml(w.category || "其他")}</span>
+                </div>
+                ${w.url ? `<a href="${escapeHtml(w.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline truncate block mt-1">🔗 ${escapeHtml(w.url)}</a>` : ""}
+                ${w.description ? `<p class="text-sm text-slate-600 mt-2">${escapeHtml(w.description)}</p>` : ""}
+                <div class="flex items-center justify-between mt-3">
+                  <span class="text-xs text-slate-400">${escapeHtml(w.added_by_name || "")} 添加</span>
+                  <button onclick="deleteWishlist(${w.id})" class="text-xs text-red-500 hover:text-red-700">删除</button>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>`}
+  `;
+}
+
+function showWishlistForm() {
+  showModal(`
+    <form id="wishlist-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新增想去的地方</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：伏见稻荷大社" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">分类</label>
+          <select name="category" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+            <option>景点</option><option>餐厅</option><option>路线</option><option>购物</option><option selected>其他</option>
+          </select>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">链接 URL（Google Maps / 大众点评 / 小红书...）</label>
+          <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">图片 URL（可选）</label>
+          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">说明（为什么要去、路线备注）</label>
+          <textarea name="description" rows="2" maxlength="300" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("wishlist-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/wishlist`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadTabData();
+      toast("已添加", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteWishlist(id) {
+  if (!confirm("确定删除？")) return;
+  try {
+    await api(`/api/wishlist/${id}`, { method: "DELETE" });
+    await loadTabData();
+    toast("已删除", "success");
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Itinerary ========================================
+function renderItineraryTab() {
+  const items = state.itinerary;
+  // group by day
+  const byDay = {};
+  items.forEach(it => {
+    const day = it.day_date || "未排日期";
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(it);
+  });
+  const days = Object.keys(byDay).sort();
+
+  return `
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-slate-500">每天的安排，按日期分组</p>
+      <button onclick="showItineraryForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 新增行程</button>
+    </div>
+    ${items.length === 0
+      ? `<div class="text-center text-slate-400 py-8">还没有行程项</div>`
+      : days.map(day => `
+        <div class="mb-5">
+          <h4 class="text-sm font-medium text-slate-700 mb-2 sticky top-0 bg-slate-50 py-1">📅 ${escapeHtml(day === "未排日期" ? day : day)}</h4>
+          <div class="space-y-2">
+            ${byDay[day].map(it => `
+              <div class="bg-white border border-slate-200 rounded-lg p-3">
+                <div class="flex items-start justify-between gap-2">
+                  <div class="flex-1">
+                    <div class="flex items-center gap-2">
+                      ${it.start_time ? `<span class="text-xs text-slate-500 font-mono">${escapeHtml(it.start_time)}</span>` : ""}
+                      <h5 class="font-medium text-slate-800">${escapeHtml(it.title)}</h5>
+                    </div>
+                    ${it.location ? `<div class="text-sm text-slate-600 mt-0.5">📍 ${escapeHtml(it.location)}</div>` : ""}
+                    ${it.address ? `<div class="text-xs text-slate-500 mt-0.5">${escapeHtml(it.address)}</div>` : ""}
+                    ${it.description ? `<p class="text-sm text-slate-600 mt-2">${escapeHtml(it.description)}</p>` : ""}
+                    ${it.url ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline block mt-1">🔗 ${escapeHtml(it.url)}</a>` : ""}
+                    ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mt-2 rounded-lg max-h-32" onerror="this.style.display='none'" />` : ""}
+                  </div>
+                  <button onclick="deleteItinerary(${it.id})" class="text-xs text-red-500 hover:text-red-700 whitespace-nowrap">删除</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `).join("")}
+  `;
+}
+
+function showItineraryForm() {
+  showModal(`
+    <form id="itin-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新增行程项</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：清水寺参观" />
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div><label class="block text-sm text-slate-600 mb-1">日期</label>
+            <input name="day_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">开始</label>
+            <input name="start_time" type="time" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">结束</label>
+            <input name="end_time" type="time" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">地点名</label>
+          <input name="location" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：伏见稻荷大社" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">详细地址</label>
+          <input name="address" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="完整地址" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">说明</label>
+          <textarea name="description" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">链接 URL</label>
+          <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
+          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("itin-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/itinerary`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadTabData();
+      toast("已添加", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteItinerary(id) {
+  if (!confirm("确定删除？")) return;
+  try {
+    await api(`/api/itinerary/${id}`, { method: "DELETE" });
+    await loadTabData();
+    toast("已删除", "success");
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Hotels ===========================================
+function renderHotelsTab() {
+  return `
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-slate-500">酒店信息共享，方便大家一起导航</p>
+      <button onclick="showHotelForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 新增酒店</button>
+    </div>
+    ${state.hotels.length === 0
+      ? `<div class="text-center text-slate-400 py-8">还没有酒店信息</div>`
+      : `<div class="space-y-3">
+          ${state.hotels.map(h => `
+            <div class="bg-white border border-slate-200 rounded-lg p-4">
+              <div class="flex items-start justify-between gap-2">
+                <h4 class="font-bold text-slate-800">${escapeHtml(h.name)}</h4>
+                <button onclick="deleteHotel(${h.id})" class="text-xs text-red-500 hover:text-red-700">删除</button>
+              </div>
+              ${h.address ? `<div class="text-sm text-slate-600 mt-1">📍 ${escapeHtml(h.address)}</div>` : ""}
+              <div class="grid grid-cols-2 gap-2 mt-3 text-sm">
+                ${h.check_in ? `<div><span class="text-slate-500">入住：</span>${escapeHtml(h.check_in)}</div>` : ""}
+                ${h.check_out ? `<div><span class="text-slate-500">退房：</span>${escapeHtml(h.check_out)}</div>` : ""}
+                ${h.room_numbers ? `<div><span class="text-slate-500">房号：</span>${escapeHtml(h.room_numbers)}</div>` : ""}
+                ${h.booked_by_name ? `<div><span class="text-slate-500">预订人：</span>${escapeHtml(h.booked_by_name)}</div>` : ""}
+                ${h.contact_phone ? `<div><span class="text-slate-500">电话：</span>${escapeHtml(h.contact_phone)}</div>` : ""}
+              </div>
+              ${h.notes ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50 rounded p-2">${escapeHtml(h.notes)}</p>` : ""}
+              ${h.url ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline block mt-2">🔗 ${escapeHtml(h.url)}</a>` : ""}
+            </div>
+          `).join("")}
+        </div>`}
+  `;
+}
+
+function showHotelForm() {
+  const memberOpts = state.members.map(m => `<option value="${m.id}">${escapeHtml(m.display_name)}</option>`).join("");
+  showModal(`
+    <form id="hotel-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新增酒店</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">酒店名</label>
+          <input name="name" required class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">地址</label>
+          <input name="address" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">入住</label>
+            <input name="check_in" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">退房</label>
+            <input name="check_out" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">房号（多间用逗号）</label>
+          <input name="room_numbers" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：301,302" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">预订人</label>
+          <select name="booked_by" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+            <option value="">- 选择 -</option>${memberOpts}
+          </select>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">联系电话</label>
+          <input name="contact_phone" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">备注</label>
+          <textarea name="notes" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">预订链接</label>
+          <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("hotel-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    if (body.booked_by === "") body.booked_by = null;
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/hotels`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadTabData();
+      toast("已添加", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteHotel(id) {
+  if (!confirm("确定删除？")) return;
+  try {
+    await api(`/api/hotels/${id}`, { method: "DELETE" });
+    await loadTabData();
+    toast("已删除", "success");
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Meetings =========================================
+function renderMeetingsTab() {
+  return `
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-sm text-slate-500">集合时间和地点</p>
+      <button onclick="showMeetingForm()" class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 新增集合点</button>
+    </div>
+    ${state.meetings.length === 0
+      ? `<div class="text-center text-slate-400 py-8">还没有集合点</div>`
+      : `<div class="space-y-3">
+          ${state.meetings.map(m => `
+            <div class="bg-white border border-slate-200 rounded-lg p-4">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="text-xs text-slate-500 mb-1">${m.meet_time ? escapeHtml(m.meet_time.replace("T"," ").slice(0,16)) : "时间待定"}</div>
+                  <div class="font-bold text-slate-800">📍 ${escapeHtml(m.location)}</div>
+                  ${m.address ? `<div class="text-sm text-slate-600 mt-0.5">${escapeHtml(m.address)}</div>` : ""}
+                </div>
+                <button onclick="deleteMeeting(${m.id})" class="text-xs text-red-500 hover:text-red-700">删除</button>
+              </div>
+              ${m.notes ? `<p class="text-sm text-slate-600 mt-2 bg-slate-50 rounded p-2">${escapeHtml(m.notes)}</p>` : ""}
+            </div>
+          `).join("")}
+        </div>`}
+  `;
+}
+
+function showMeetingForm() {
+  showModal(`
+    <form id="meeting-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新增集合点</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">时间</label>
+          <input name="meet_time" type="datetime-local" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">地点名</label>
+          <input name="location" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：京都站中央口" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">详细地址</label>
+          <input name="address" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">备注</label>
+          <textarea name="notes" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：穿红色 T 恤"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("meeting-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {};
+    fd.forEach((v, k) => {
+      body[k] = k === "meet_time" && v ? v.replace("T", " ") + ":00" : v;
+    });
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/meetings`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadTabData();
+      toast("已添加", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteMeeting(id) {
+  if (!confirm("确定删除？")) return;
+  try {
+    await api(`/api/meetings/${id}`, { method: "DELETE" });
+    await loadTabData();
+    toast("已删除", "success");
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Expenses ========================================
+function renderExpensesTab() {
+  return `
+    <!-- 余额表 -->
+    <div class="bg-gradient-to-br from-indigo-50 to-emerald-50 rounded-xl p-4 mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="text-sm font-bold text-slate-700">💰 实时余额（应收/应付）</h4>
+      </div>
+      ${state.balances.length === 0
+        ? `<div class="text-center text-slate-400 text-sm py-2">还没有费用记录</div>`
+        : `<div class="space-y-1">
+            ${state.balances.map(b => `
+              <div class="flex items-center justify-between bg-white/70 rounded-lg px-3 py-2">
+                <span class="text-sm text-slate-700">${escapeHtml(b.display_name)}</span>
+                <span class="font-mono font-bold ${
+                  b.balance > 0.01 ? "balance-pos" :
+                  b.balance < -0.01 ? "balance-neg" : "balance-zero"
+                }">
+                  ${b.balance > 0.01 ? "+" : ""}${b.balance.toFixed(2)}
+                </span>
+              </div>
+            `).join("")}
+          </div>
+          <div class="text-xs text-slate-500 mt-2 text-right">
+            正数=应收，负数=应付
+          </div>`}
+    </div>
+
+    <!-- 群组管理 -->
+    <div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="text-sm font-bold text-slate-700">📁 费用群组</h4>
+        <button onclick="showGroupForm()" class="text-xs bg-slate-700 hover:bg-slate-800 text-white px-2.5 py-1 rounded-lg">+ 新建群组</button>
+      </div>
+      ${state.groups.length === 0
+        ? `<div class="text-sm text-slate-400">还没有群组</div>`
+        : `<div class="space-y-2">
+            ${state.groups.map(g => `
+              <div class="bg-white border border-slate-200 rounded-lg p-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="text-sm font-medium text-slate-800">${escapeHtml(g.name)}</span>
+                    <span class="text-xs text-slate-500 ml-2">${g.members ? g.members.length : 0} 人</span>
+                  </div>
+                  <button onclick="editGroupMembers(${g.id})" class="text-xs text-indigo-600 hover:underline">编辑成员</button>
+                </div>
+                ${g.members && g.members.length > 0 ? `
+                  <div class="flex flex-wrap gap-1 mt-2">
+                    ${g.members.map(m => `<span class="text-xs bg-slate-100 px-2 py-0.5 rounded-full">${escapeHtml(m.display_name)}</span>`).join("")}
+                  </div>` : ""}
+              </div>
+            `).join("")}
+          </div>`}
+    </div>
+
+    <!-- 费用列表 -->
+    <div class="flex items-center justify-between mb-2">
+      <h4 class="text-sm font-bold text-slate-700">📝 费用记录</h4>
+      <button onclick="showExpenseForm()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg">+ 新增费用</button>
+    </div>
+    ${state.expenses.length === 0
+      ? `<div class="text-sm text-slate-400 text-center py-6">还没有费用记录</div>`
+      : `<div class="space-y-2">
+          ${state.expenses.map(e => `
+            <div class="bg-white border border-slate-200 rounded-lg p-3">
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-emerald-600">${escapeHtml(e.currency)} ${e.amount.toFixed(2)}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(e.group_name)}</span>
+                  </div>
+                  <div class="text-sm text-slate-700 mt-1">${escapeHtml(e.description || "(无说明)")}</div>
+                  <div class="text-xs text-slate-500 mt-1">
+                    ${escapeHtml(e.paid_by_name || "")} 付 · ${e.expense_date || ""}
+                  </div>
+                </div>
+                <button onclick="deleteExpense(${e.id})" class="text-xs text-red-500 hover:text-red-700">删除</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>`}
+  `;
+}
+
+function showGroupForm() {
+  const memberOpts = state.members.map(m => `
+    <label class="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded">
+      <input type="checkbox" name="member_ids" value="${m.id}" ${m.role === 'owner' ? 'checked' : ''} />
+      <span>${escapeHtml(m.display_name)}${m.role === 'owner' ? ' (创建者)' : ''}</span>
+    </label>
+  `).join("");
+  showModal(`
+    <form id="group-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新建费用群组</h3>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">群组名</label>
+          <input name="name" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：全员 / 团餐 / 室友 A" />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">成员（费用要分给谁）</label>
+          <div class="border border-slate-200 rounded-lg p-2 max-h-48 overflow-y-auto space-y-1">
+            ${memberOpts}
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">创建</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("group-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const member_ids = fd.getAll("member_ids").map(s => parseInt(s));
+    const body = { name: fd.get("name"), member_ids };
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/expense-groups`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadGroups();
+      toast("群组已创建", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function editGroupMembers(gid) {
+  const g = state.groups.find(g => g.id === gid);
+  if (!g) return;
+  const memberOpts = state.members.map(m => {
+    const checked = g.members && g.members.some(gm => gm.id === m.id);
+    return `
+      <label class="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded">
+        <input type="checkbox" name="member_ids" value="${m.id}" ${checked ? 'checked' : ''} />
+        <span>${escapeHtml(m.display_name)}</span>
+      </label>`;
+  }).join("");
+  showModal(`
+    <form id="edit-group-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-1">编辑群组成员</h3>
+      <p class="text-sm text-slate-500 mb-4">${escapeHtml(g.name)}</p>
+      <div class="border border-slate-200 rounded-lg p-2 max-h-64 overflow-y-auto space-y-1">
+        ${memberOpts}
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("edit-group-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const member_ids = fd.getAll("member_ids").map(s => parseInt(s));
+    try {
+      await api(`/api/expense-groups/${gid}/members`, { method: "PUT", body: JSON.stringify({ member_ids }) });
+      closeModal();
+      await loadGroups();
+      toast("已保存", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+function showExpenseForm() {
+  if (state.groups.length === 0) {
+    toast("请先创建费用群组", "warning");
+    return;
+  }
+  const groupOpts = state.groups.map(g => `<option value="${g.id}">${escapeHtml(g.name)} (${g.member_count}人)</option>`).join("");
+  const memberOpts = state.members.map(m => `<option value="${m.id}" ${m.id === getUser().id ? 'selected' : ''}>${escapeHtml(m.display_name)}</option>`).join("");
+  showModal(`
+    <form id="expense-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新增费用</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">金额</label>
+          <input name="amount" type="number" step="0.01" min="0.01" required class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="0.00" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">币种</label>
+            <select name="currency" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+              <option>CNY</option><option>USD</option><option>EUR</option><option>JPY</option><option>GBP</option><option>HKD</option><option>SGD</option><option>THB</option>
+            </select>
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">日期</label>
+            <input name="expense_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">谁付的</label>
+          <select name="paid_by" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+            ${memberOpts}
+          </select>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">分给哪个群组</label>
+          <select name="group_id" required class="w-full border border-slate-300 rounded-lg px-3 py-2">
+            <option value="">- 选择群组 -</option>
+            ${groupOpts}
+          </select>
+          <p class="text-xs text-slate-500 mt-1">费用会自动按群组人数平均分摊</p>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">说明</label>
+          <input name="description" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：晚餐 / 打车 / 酒店" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("expense-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = {};
+    fd.forEach((v, k) => {
+      body[k] = k === "amount" ? parseFloat(v) :
+                k === "paid_by" || k === "group_id" ? parseInt(v) : v;
+    });
+    try {
+      await api(`/api/trips/${state.currentTrip.id}/expenses`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      await loadTabData();
+      toast("已记账", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteExpense(id) {
+  if (!confirm("确定删除这笔费用？")) return;
+  try {
+    await api(`/api/expenses/${id}`, { method: "DELETE" });
+    await loadTabData();
+    toast("已删除", "success");
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Members ==========================================
+function renderMembersTab() {
+  return `
+    <p class="text-sm text-slate-500 mb-3">当前旅行的成员 (${state.members.length} 人)</p>
+    <div class="space-y-2">
+      ${state.members.map(m => `
+        <div class="bg-white border border-slate-200 rounded-lg p-3 flex items-center justify-between">
+          <div>
+            <div class="font-medium text-slate-800">${escapeHtml(m.display_name)}</div>
+            <div class="text-xs text-slate-500">@${escapeHtml(m.username)}</div>
+          </div>
+          <span class="text-xs px-2 py-0.5 rounded-full ${m.role === 'owner' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
+            ${m.role === 'owner' ? '👑 创建者' : '成员'}
+          </span>
+        </div>
+      `).join("")}
+    </div>
+    <div class="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+      💡 邀请码：<code class="bg-white px-2 py-0.5 rounded font-mono">${escapeHtml(state.currentTrip.invite_code)}</code>
+      <br/>把邀请码发给朋友，他们注册后用「加入旅行」加入
+    </div>
+  `;
+}
+
+// ========== Boot =================================================
+window.addEventListener("DOMContentLoaded", () => {
+  renderApp();
+});
+</script>
+</body>
+</html>
