@@ -1,4 +1,5 @@
-# Render deployment config
+# Render Blueprint deployment config (Render 2023+ spec).
+#
 # 1. Push this folder to a GitHub repo (没有 GitHub 账号？先用 https://github.com 注册一个)
 # 2. Go to https://render.com → Sign in with GitHub
 # 3. Dashboard → New + → Blueprint → select your repo
@@ -7,33 +8,33 @@
 #
 # After deploy, the DATABASE_URL env var is automatically injected into
 # the web service, so db.py connects without any manual config.
+#
+# NOTE: runtime.txt pins Python to 3.13.7. Render's default is 3.14+,
+# which would break psycopg2-binary 2.9.x. We use psycopg 3 which works
+# on 3.13 AND 3.14, so even if Render ignores runtime.txt the build
+# should still succeed. Both paths are safe.
+
+databases:
+  - name: trip-share-db
+    plan: free
+    databaseName: trip_share
+    user: trip_share
+    # Free plan: 1 GB storage, expires after 90 days of inactivity.
+    # Render will email you a renewal link. For long-term data, upgrade
+    # to "$7/mo Starter" plan or migrate to Neon/Supabase.
 
 services:
-  - type: pserv
-    name: trip-share-db
-    plan: free
-    region: oregon
-    # free Postgres on Render: 1 GB storage, expires after 90 days of inactivity
-    # (render will email you a renewal link). For long-term data, upgrade to
-    # the $7/mo "Starter" plan or migrate to Neon / Supabase later.
-
   - type: web
     name: trip-share
-    env: python
+    runtime: python
     plan: free
-    region: oregon
-    runtime: python-3.11.10
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120
     healthCheckPath: /health
     envVars:
-      # 自动注入 Render 提供的 Postgres 连接字符串
       - key: DATABASE_URL
-        fromService:
-          type: pserv
+        fromDatabase:
           name: trip-share-db
           property: connectionString
-      - key: PYTHON_VERSION
-        value: 3.11.10
       - key: SECRET_KEY
-        generateValue: true   # 未来如果要升级 token 为 JWT 就有现成的 key
+        generateValue: true

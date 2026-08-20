@@ -130,6 +130,51 @@ CREATE TABLE IF NOT EXISTS expenses (
     FOREIGN KEY(group_id) REFERENCES expense_groups(id) ON DELETE CASCADE,
     FOREIGN KEY(paid_by) REFERENCES users(id)
 );
+
+-- ===== Travel guides =====
+CREATE TABLE IF NOT EXISTS travel_guides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    trip_id INTEGER,
+    title TEXT NOT NULL,
+    destination TEXT,
+    cover_image TEXT,
+    summary TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    tags TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(trip_id) REFERENCES trips(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS travel_guide_days (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guide_id INTEGER NOT NULL,
+    day_index INTEGER NOT NULL,
+    day_date TEXT,
+    title TEXT,
+    notes TEXT,
+    UNIQUE(guide_id, day_index),
+    FOREIGN KEY(guide_id) REFERENCES travel_guides(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS travel_guide_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day_id INTEGER NOT NULL,
+    sort_index INTEGER DEFAULT 0,
+    time TEXT,
+    title TEXT NOT NULL,
+    location TEXT,
+    address TEXT,
+    description TEXT,
+    image_url TEXT,
+    url TEXT,
+    category TEXT,
+    FOREIGN KEY(day_id) REFERENCES travel_guide_days(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_guides_user ON travel_guides(user_id);
+CREATE INDEX IF NOT EXISTS idx_guides_trip ON travel_guides(trip_id);
+CREATE INDEX IF NOT EXISTS idx_guide_items_day ON travel_guide_items(day_id);
 """
 
 
@@ -455,6 +500,250 @@ def compute_balances(conn, trip_id):
         })
     result.sort(key=lambda x: -x['balance'])
     return result
+
+
+# --- Travel guide helpers (SQLite) ---------------------------------------
+
+def create_guide(conn, user_id, trip_id, title, destination, cover_image,
+                  summary, start_date, end_date, tags):
+    cur = conn.execute(
+        "INSERT INTO travel_guides (user_id, trip_id, title, destination, cover_image, summary, start_date, end_date, tags) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (user_id, trip_id, title, destination, cover_image, summary,
+         start_date, end_date, tags),
+    )
+    return cur.lastrowid
+
+
+def get_guide(conn, guide_id):
+    row = conn.execute("""
+        SELECT g.*, u.display_name AS created_by_name, t.name AS trip_name
+        FROM travel_guides g
+        JOIN users u ON u.id = g.user_id
+        LEFT JOIN trips t ON t.id = g.trip_id
+        WHERE g.id=?
+    """, (guide_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def list_my_personal_guides(conn, user_id):
+    rows = conn.execute("""
+        SELECT g.*, u.display_name AS created_by_name
+        FROM travel_guides g
+        JOIN users u ON u.id = g.user_id
+        WHERE g.user_id=? AND g.trip_id IS NULL
+        ORDER BY g.updated_at DESC
+    """, (user_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_my_all_guides(conn, user_id):
+    rows = conn.execute("""
+        SELECT g.*, u.display_name AS created_by_name, t.name AS trip_name
+        FROM travel_guides g
+        JOIN users u ON u.id = g.user_id
+        LEFT JOIN trips t ON t.id = g.trip_id
+        WHERE g.user_id=?
+           OR (g.trip_id IS NOT NULL
+               AND g.trip_id IN (SELECT trip_id FROM trip_members WHERE user_id=?))
+        ORDER BY g.updated_at DESC
+    """, (user_id, user_id)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_trip_guides(conn, trip_id):
+    rows = conn.execute("""
+        SELECT g.*, u.display_name AS created_by_name
+        FROM travel_guides g
+        JOIN users u ON u.id = g.user_id
+        WHERE g.trip_id=?
+        ORDER BY g.updated_at DESC
+    """, (trip_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_guide(conn, guide_id, **kwargs):
+    allowed = ["title", "destination", "cover_image", "summary",
+               "start_date", "end_date", "tags"]
+    sets, vals = [], []
+    for k in allowed:
+        if k in kwargs:
+            sets.append(f"{k}=?")
+            vals.append(kwargs[k])
+    if not sets:
+        return
+    sets.append("updated_at=CURRENT_TIMESTAMP")
+    vals.append(guide_id)
+    conn.execute(f"UPDATE travel_guides SET {', '.join(sets)} WHERE id=?", vals)
+
+
+def delete_guide(conn, guide_id):
+    conn.execute("DELETE FROM travel_guides WHERE id=?", (guide_id,))
+
+
+def is_guide_editor(conn, guide_id, user_id):
+    row = conn.execute(
+        "SELECT user_id, trip_id FROM travel_guides WHERE id=?",
+        (guide_id,),
+    ).fetchone()
+    if not row:
+        return False
+    if row["user_id"] == user_id:
+        return True
+    if row["trip_id"] is not None:
+        m = conn.execute(
+            "SELECT 1 FROM trip_members WHERE trip_id=? AND user_id=?",
+            (row["trip_id"], user_id),
+        ).fetchone()
+        return m is not None
+    return False
+
+
+def get_guide_viewer(conn, guide_id, user_id):
+    row = conn.execute(
+        "SELECT user_id, trip_id FROM travel_guides WHERE id=?",
+        (guide_id,),
+    ).fetchone()
+    if not row:
+        return False
+    if row["user_id"] == user_id:
+        return True
+    if row["trip_id"] is not None:
+        m = conn.execute(
+            "SELECT 1 FROM trip_members WHERE trip_id=? AND user_id=?",
+            (row["trip_id"], user_id),
+        ).fetchone()
+        return m is not None
+    return False
+
+
+# --- Days ---
+
+def create_guide_day(conn, guide_id, day_index, day_date, title, notes):
+    """SQLite 没有 ON CONFLICT UPDATE，简化成 insert 即可（前端负责 day_index 唯一）。"""
+    cur = conn.execute(
+        "INSERT INTO travel_guide_days (guide_id, day_index, day_date, title, notes) "
+        "VALUES (?,?,?,?,?)",
+        (guide_id, day_index, day_date, title, notes),
+    )
+    conn.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                 (guide_id,))
+    return cur.lastrowid
+
+
+def list_guide_days(conn, guide_id):
+    rows = conn.execute(
+        "SELECT * FROM travel_guide_days WHERE guide_id=? ORDER BY day_index ASC",
+        (guide_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_guide_day(conn, day_id):
+    row = conn.execute("SELECT * FROM travel_guide_days WHERE id=?", (day_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def update_guide_day(conn, day_id, guide_id=None, **kwargs):
+    allowed = ["day_index", "day_date", "title", "notes"]
+    sets, vals = [], []
+    for k in allowed:
+        if k in kwargs:
+            sets.append(f"{k}=?")
+            vals.append(kwargs[k])
+    if not sets:
+        return
+    vals.append(day_id)
+    conn.execute(f"UPDATE travel_guide_days SET {', '.join(sets)} WHERE id=?", vals)
+    if guide_id is not None:
+        conn.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (guide_id,))
+
+
+def delete_guide_day(conn, day_id, guide_id=None):
+    conn.execute("DELETE FROM travel_guide_days WHERE id=?", (day_id,))
+    if guide_id is not None:
+        conn.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                     (guide_id,))
+
+
+# --- Items ---
+
+def create_guide_item(conn, day_id, time, title, location, address,
+                       description, image_url, url, category, sort_index=0):
+    cur = conn.execute("""
+        INSERT INTO travel_guide_items
+          (day_id, sort_index, time, title, location, address, description, image_url, url, category)
+        VALUES (?,?,?,?,?,?,?,?,?,?)
+    """, (day_id, sort_index, time, title, location, address,
+          description, image_url, url, category))
+    conn.execute("""
+        UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP
+        WHERE id = (SELECT guide_id FROM travel_guide_days WHERE id=?)
+    """, (day_id,))
+    return cur.lastrowid
+
+
+def list_guide_items(conn, day_id):
+    rows = conn.execute(
+        "SELECT * FROM travel_guide_items WHERE day_id=? ORDER BY sort_index ASC, time ASC",
+        (day_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_guide_item(conn, item_id):
+    row = conn.execute("SELECT * FROM travel_guide_items WHERE id=?", (item_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def update_guide_item(conn, item_id, **kwargs):
+    allowed = ["sort_index", "time", "title", "location", "address",
+               "description", "image_url", "url", "category"]
+    sets, vals = [], []
+    for k in allowed:
+        if k in kwargs:
+            sets.append(f"{k}=?")
+            vals.append(kwargs[k])
+    if not sets:
+        return
+    vals.append(item_id)
+    conn.execute(f"UPDATE travel_guide_items SET {', '.join(sets)} WHERE id=?", vals)
+    conn.execute("""
+        UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP
+        WHERE id = (SELECT d.guide_id FROM travel_guide_items i
+                    JOIN travel_guide_days d ON d.id=i.day_id
+                    WHERE i.id=?)
+    """, (item_id,))
+
+
+def delete_guide_item(conn, item_id):
+    row = conn.execute(
+        "SELECT day_id FROM travel_guide_items WHERE id=?", (item_id,)
+    ).fetchone()
+    conn.execute("DELETE FROM travel_guide_items WHERE id=?", (item_id,))
+    if row:
+        conn.execute("""
+            UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP
+            WHERE id = (SELECT guide_id FROM travel_guide_days WHERE id=?)
+        """, (row["day_id"],))
+
+
+def get_guide_full(conn, guide_id):
+    """一次性拉取攻略 + 所有 days + 所有 items，给前端用。"""
+    guide = get_guide(conn, guide_id)
+    if not guide:
+        return None
+    days = list_guide_days(conn, guide_id)
+    days_full = []
+    for d in days:
+        items = list_guide_items(conn, d["id"])
+        days_full.append({
+            **d,
+            "items": items,
+        })
+    guide["days"] = days_full
+    return guide
 
 
 if __name__ == "__main__":

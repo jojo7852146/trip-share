@@ -497,6 +497,218 @@ def get_balances(trip_id):
         balances = db.compute_balances(conn, trip_id)
         return jsonify({"ok": True, "balances": balances})
 
+# --- Travel guides (个人 + trip 内协作) ---------------------------------
+# 设计要点：
+#   - 个人攻略 (trip_id IS NULL) 只 owner 能改能看
+#   - trip 攻略   (trip_id 非空)    该 trip 的成员都能改能看
+#   - GET /api/guides                  → 我的所有可见攻略（个人 + trip）
+#   - GET /api/guides/<id>            → 攻略详情（含 days + items）
+#   - POST /api/trips/<tid>/guides    → 在某个 trip 下新建攻略（trip 成员才能）
+#   - POST /api/guides                → 新建个人攻略（body 不带 trip_id）
+
+@app.route("/api/guides", methods=["GET"])
+@require_auth
+def list_my_guides():
+    with db.get_db() as conn:
+        guides = db.list_my_all_guides(conn, request.user_id)
+        # 把每条加上天数 + 条目数
+        for g in guides:
+            days = db.list_guide_days(conn, g["id"])
+            item_count = 0
+            for d in days:
+                item_count += len(db.list_guide_items(conn, d["id"]))
+            g["day_count"] = len(days)
+            g["item_count"] = item_count
+        return jsonify({"ok": True, "guides": guides})
+
+
+@app.route("/api/guides/<int:guide_id>", methods=["GET"])
+@require_auth
+def get_one_guide(guide_id):
+    with db.get_db() as conn:
+        if not db.get_guide_viewer(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "没有权限查看该攻略"}), 403
+        guide = db.get_guide_full(conn, guide_id)
+        # 标记当前用户是否能编辑（前端用于隐藏/显示编辑按钮）
+        guide["can_edit"] = db.is_guide_editor(conn, guide_id, request.user_id)
+        return jsonify({"ok": True, "guide": guide})
+
+
+@app.route("/api/guides", methods=["POST"])
+@require_auth
+def create_personal_guide():
+    """创建个人攻略 (body 不带 trip_id) — 任何登录用户都能建。"""
+    return _create_guide_internal(trip_id=None)
+
+
+@app.route("/api/trips/<int:trip_id>/guides", methods=["GET"])
+@require_trip_member
+def list_trip_guides(trip_id):
+    with db.get_db() as conn:
+        guides = db.list_trip_guides(conn, trip_id)
+        for g in guides:
+            days = db.list_guide_days(conn, g["id"])
+            g["day_count"] = len(days)
+        return jsonify({"ok": True, "guides": guides})
+
+
+@app.route("/api/trips/<int:trip_id>/guides", methods=["POST"])
+@require_trip_member
+def create_trip_guide(trip_id):
+    return _create_guide_internal(trip_id=trip_id)
+
+
+def _create_guide_internal(trip_id):
+    data = request.json or {}
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"ok": False, "error": "攻略标题不能为空"}), 400
+    with db.get_db() as conn:
+        gid = db.create_guide(
+            conn, request.user_id, trip_id, title,
+            (data.get("destination") or "").strip(),
+            data.get("cover_image") or "",
+            data.get("summary") or "",
+            data.get("start_date") or "",
+            data.get("end_date") or "",
+            data.get("tags") or "",
+        )
+        guide = db.get_guide_full(conn, gid)
+        guide["can_edit"] = db.is_guide_editor(conn, gid, request.user_id)
+        return jsonify({"ok": True, "guide": guide})
+
+
+@app.route("/api/guides/<int:guide_id>", methods=["PUT"])
+@require_auth
+def update_guide_endpoint(guide_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        data = request.json or {}
+        kwargs = {}
+        for k in ["title", "destination", "cover_image", "summary",
+                  "start_date", "end_date", "tags"]:
+            if k in data:
+                kwargs[k] = data[k] or ""
+        # title 不能为空
+        if "title" in kwargs and not kwargs["title"].strip():
+            return jsonify({"ok": False, "error": "标题不能为空"}), 400
+        db.update_guide(conn, guide_id, **kwargs)
+        guide = db.get_guide_full(conn, guide_id)
+        return jsonify({"ok": True, "guide": guide})
+
+
+@app.route("/api/guides/<int:guide_id>", methods=["DELETE"])
+@require_auth
+def delete_guide_endpoint(guide_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权删除该攻略"}), 403
+        db.delete_guide(conn, guide_id)
+        return jsonify({"ok": True})
+
+
+# --- Days ---
+
+@app.route("/api/guides/<int:guide_id>/days", methods=["POST"])
+@require_auth
+def add_guide_day(guide_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        data = request.json or {}
+        day_index = int(data.get("day_index") or 1)
+        day = db.create_guide_day(
+            conn, guide_id, day_index,
+            data.get("day_date") or "",
+            data.get("title") or "",
+            data.get("notes") or "",
+        )
+        return jsonify({"ok": True, "day": db.get_guide_day(conn, day)})
+
+
+@app.route("/api/guides/<int:guide_id>/days/<int:day_id>", methods=["PUT"])
+@require_auth
+def update_guide_day_endpoint(guide_id, day_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        data = request.json or {}
+        kwargs = {}
+        for k in ["day_index", "day_date", "title", "notes"]:
+            if k in data:
+                kwargs[k] = data[k] or ""
+        if "day_index" in kwargs:
+            kwargs["day_index"] = int(kwargs["day_index"])
+        db.update_guide_day(conn, day_id, guide_id=guide_id, **kwargs)
+        return jsonify({"ok": True, "day": db.get_guide_day(conn, day_id)})
+
+
+@app.route("/api/guides/<int:guide_id>/days/<int:day_id>", methods=["DELETE"])
+@require_auth
+def delete_guide_day_endpoint(guide_id, day_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        db.delete_guide_day(conn, day_id, guide_id=guide_id)
+        return jsonify({"ok": True})
+
+
+# --- Items ---
+
+@app.route("/api/guides/<int:guide_id>/days/<int:day_id>/items", methods=["POST"])
+@require_auth
+def add_guide_item(guide_id, day_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        data = request.json or {}
+        title = (data.get("title") or "").strip()
+        if not title:
+            return jsonify({"ok": False, "error": "条目标题不能为空"}), 400
+        iid = db.create_guide_item(
+            conn, day_id,
+            data.get("time") or "",
+            title,
+            data.get("location") or "",
+            data.get("address") or "",
+            data.get("description") or "",
+            data.get("image_url") or "",
+            data.get("url") or "",
+            data.get("category") or "",
+            int(data.get("sort_index") or 0),
+        )
+        return jsonify({"ok": True, "item": db.get_guide_item(conn, iid)})
+
+
+@app.route("/api/guides/<int:guide_id>/days/<int:day_id>/items/<int:item_id>", methods=["PUT"])
+@require_auth
+def update_guide_item_endpoint(guide_id, day_id, item_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        data = request.json or {}
+        kwargs = {}
+        for k in ["time", "title", "location", "address", "description",
+                  "image_url", "url", "category"]:
+            if k in data:
+                kwargs[k] = data[k] or ""
+        if "sort_index" in data:
+            kwargs["sort_index"] = int(data["sort_index"])
+        db.update_guide_item(conn, item_id, **kwargs)
+        return jsonify({"ok": True, "item": db.get_guide_item(conn, item_id)})
+
+
+@app.route("/api/guides/<int:guide_id>/days/<int:day_id>/items/<int:item_id>", methods=["DELETE"])
+@require_auth
+def delete_guide_item_endpoint(guide_id, day_id, item_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
+        db.delete_guide_item(conn, item_id)
+        return jsonify({"ok": True})
+
+
 # --- Entry ----------------------------------------------------------------
 
 if __name__ == "__main__":

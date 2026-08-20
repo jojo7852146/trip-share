@@ -167,6 +167,7 @@ function renderAuth(mode) {
 
 // ========== Main app ==============================================
 let state = {
+  mode: "trips",          // "trips" | "guides"
   trips: [],
   currentTrip: null,
   members: [],
@@ -178,6 +179,10 @@ let state = {
   expenses: [],
   balances: [],
   groups: [],
+  // 攻略库
+  myGuides: [],           // 我能看见的所有攻略
+  tripGuides: [],         // 当前 trip 内的攻略（在 trip-guides tab 用）
+  currentGuide: null,     // 攻略详情对象（含 days[]）
 };
 
 async function loadTrip(tripId) {
@@ -218,6 +223,8 @@ async function loadTabData() {
   state.meetings = m.items;
   state.expenses = e.items;
   state.balances = e.balances;
+  // 同时也加载 trip 内的攻略，但不阻塞主要数据
+  loadTripGuides().catch(() => {});
 }
 
 async function renderApp() {
@@ -248,20 +255,66 @@ async function renderApp() {
 
   document.getElementById("app").innerHTML = `
     ${renderTopBar(user)}
-    ${state.currentTrip ? renderTripView() : renderTripListView()}
+    ${state.mode === "guides" ? renderGuidesMode() : (state.currentTrip ? renderTripView() : renderTripListView())}
   `;
 }
 
+function switchMode(mode) {
+  state.mode = mode;
+  if (mode === "trips") {
+    state.currentGuide = null;
+  } else if (mode === "guides") {
+    state.currentGuide = null;
+    // 异步拉一次攻略列表
+    loadMyGuides().catch(err => toast(err.message, "error"));
+  }
+  renderApp();
+}
+
+async function loadMyGuides() {
+  const data = await api("/api/guides");
+  state.myGuides = data.guides;
+}
+
+async function loadTripGuides() {
+  if (!state.currentTrip) { state.tripGuides = []; return; }
+  const data = await api(`/api/trips/${state.currentTrip.id}/guides`);
+  state.tripGuides = data.guides;
+}
+
+async function enterGuide(id) {
+  try {
+    const data = await api(`/api/guides/${id}`);
+    state.currentGuide = data.guide;
+    // 从 trip 内进入攻略时强制切到攻略模式，否则页面会留在 trip 视图
+    state.mode = "guides";
+    renderApp();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function leaveGuide() {
+  state.currentGuide = null;
+  renderApp();
+}
+
 function renderTopBar(user) {
+  const isGuides = state.mode === "guides";
   return `
     <div class="bg-white shadow-sm sticky top-0 z-30">
-      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <span class="text-2xl">🌴</span>
           <span class="font-bold text-slate-800">旅行共享</span>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-slate-600">${escapeHtml(user.display_name)}</span>
+        <div class="flex items-center gap-2">
+          <button onclick="switchMode('${isGuides ? "trips" : "guides"}')"
+            class="text-sm font-medium px-3 py-1.5 rounded-lg border transition
+            ${isGuides ? "bg-slate-100 text-slate-700 border-slate-300" : "bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700"}">
+            ${isGuides ? "🧳 我的旅行" : "📚 攻略库"}
+          </button>
+          <span class="text-sm text-slate-600 hidden sm:inline">${escapeHtml(user.display_name)}</span>
           <button onclick="logout()" class="text-sm text-slate-500 hover:text-red-600">退出</button>
         </div>
       </div>
@@ -272,10 +325,529 @@ function renderTopBar(user) {
 function logout() {
   clearSession();
   state = {
+    mode: "trips",
     trips: [], currentTrip: null, members: [], activeTab: "overview",
-    wishlist: [], itinerary: [], hotels: [], meetings: [], expenses: [], balances: [], groups: []
+    wishlist: [], itinerary: [], hotels: [], meetings: [], expenses: [], balances: [], groups: [],
+    myGuides: [], tripGuides: [], currentGuide: null,
   };
   renderAuth("login");
+}
+
+// ========== Guides mode (列表 ↔ 详情) =====================================
+function renderGuidesMode() {
+  return state.currentGuide ? renderGuideDetail() : renderGuideList();
+}
+
+// ========== Guides: 列表 =================================================
+function renderGuideList() {
+  const guides = state.myGuides || [];
+  const personal = guides.filter(g => !g.trip_id);
+  const collab = guides.filter(g => g.trip_id);
+
+  const card = (g) => `
+    <div onclick="enterGuide(${g.id})"
+      class="bg-white rounded-xl shadow-sm hover:shadow-md transition cursor-pointer overflow-hidden border border-slate-100">
+      ${g.cover_image
+        ? `<img src="${escapeHtml(g.cover_image)}" class="w-full img-thumb" onerror="this.outerHTML='<div class=&quot;w-full img-thumb bg-gradient-to-br from-purple-200 to-pink-200&quot;></div>'" />`
+        : `<div class="w-full img-thumb bg-gradient-to-br from-purple-200 to-pink-200 flex items-center justify-center text-5xl">🗺️</div>`}
+      <div class="p-4">
+        <h3 class="font-bold text-slate-800 text-lg truncate">${escapeHtml(g.title)}</h3>
+        <div class="text-xs text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-1">
+          ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
+          ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
+        </div>
+        <div class="text-xs text-slate-600 mt-2 line-clamp-2">${escapeHtml(g.summary || "")}</div>
+        <div class="mt-3 flex items-center justify-between">
+          <div class="text-xs text-slate-400">
+            ${g.trip_id ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">📚 ${escapeHtml(g.trip_name || "本 trip 攻略")}</span>`
+                       : `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">👤 个人攻略</span>`}
+          </div>
+          <span class="text-xs text-slate-500">${g.day_count || 0} 天 · ${g.item_count || 0} 条</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const section = (title, items, emptyText) => items.length === 0 ? "" : `
+    <div class="mb-8">
+      <h3 class="text-sm font-medium text-slate-700 mb-3">${title} <span class="text-slate-400">(${items.length})</span></h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ${items.map(card).join("")}
+      </div>
+    </div>
+  `;
+
+  const totalEmpty = personal.length === 0 && collab.length === 0;
+
+  return `
+    <div class="max-w-5xl mx-auto px-4 py-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">📚 我的攻略库</h2>
+          <p class="text-sm text-slate-500 mt-1">个人独立攻略 + 你参与的旅行里协作的攻略</p>
+        </div>
+        <button onclick="showCreatePersonalGuideModal()"
+          class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+          ➕ 新建个人攻略
+        </button>
+      </div>
+      ${totalEmpty ? `
+        <div class="bg-white rounded-xl p-12 text-center">
+          <div class="text-6xl mb-3">🗺️</div>
+          <h3 class="font-medium text-slate-700 mb-2">还没有攻略</h3>
+          <p class="text-sm text-slate-500 mb-4">建一个自己的旅行攻略本吧</p>
+          <button onclick="showCreatePersonalGuideModal()"
+            class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm">
+            ➕ 新建个人攻略
+          </button>
+        </div>` : ""}
+      ${section("👤 个人攻略", personal, "")}
+      ${section("👥 我参与 trip 的攻略", collab, "")}
+    </div>
+  `;
+}
+
+function showCreatePersonalGuideModal() {
+  showModal(`
+    <form id="guide-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">新建个人攻略</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required maxlength="80" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：国庆东京 7 日自由行" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">目的地</label>
+          <input name="destination" maxlength="60" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：日本 · 东京" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">开始日期</label>
+            <input name="start_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">结束日期</label>
+            <input name="end_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL（可选）</label>
+          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">标签（逗号分隔）</label>
+          <input name="tags" maxlength="200" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：自由行,亲子,美食" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">简介/总览</label>
+          <textarea name="summary" rows="3" maxlength="500" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="整趟旅行的主题、预算范围、出行季节、关键提示..."></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">创建</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("guide-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const data = await api("/api/guides", { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      toast(`攻略创建完成！`, "success");
+      state.currentGuide = data.guide;
+      await loadMyGuides().catch(() => {});
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+// ========== Guides: 详情 / 编辑 =========================================
+function renderGuideDetail() {
+  const g = state.currentGuide;
+  // can_edit 默认 true（保护：万一某个接口忘了设置这个字段，用户刚创建时应该是 true）
+  const canEdit = g.can_edit !== false;
+  const days = g.days || [];
+
+  // 组装 days 卡片
+  const daysHtml = days.length === 0
+    ? `<div class="text-center text-slate-400 py-8 bg-white rounded-xl">还没有任何日程，点击下方"+ 添加天"开始规划</div>`
+    : days.map(d => `
+      <div class="bg-white rounded-xl shadow-sm p-4 mb-3">
+        <div class="flex items-start justify-between gap-2 mb-3">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-600 text-white font-bold text-sm">D${d.day_index}</span>
+              ${d.day_date ? `<span class="text-sm text-slate-500">${escapeHtml(d.day_date)}</span>` : ""}
+            </div>
+            <h4 class="font-bold text-slate-800">${escapeHtml(d.title || "")}</h4>
+            ${d.notes ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap">${escapeHtml(d.notes)}</p>` : ""}
+          </div>
+          ${canEdit ? `
+            <div class="flex gap-1">
+              <button onclick="showEditGuideDayModal(${g.id}, ${d.id})" class="text-xs text-slate-500 hover:text-indigo-600" title="编辑本天">✏️</button>
+              <button onclick="deleteGuideDay(${g.id}, ${d.id})" class="text-xs text-slate-500 hover:text-red-600" title="删除本天">🗑️</button>
+            </div>
+          ` : ""}
+        </div>
+        ${d.items.length === 0
+          ? `<div class="text-xs text-slate-400 italic">本天还没有具体安排</div>`
+          : `<div class="space-y-2">
+              ${d.items.map(it => renderGuideItem(g.id, d.id, it, canEdit)).join("")}
+            </div>`}
+        ${canEdit ? `
+          <button onclick="showAddGuideItemModal(${g.id}, ${d.id})"
+            class="mt-3 w-full text-xs text-purple-600 hover:bg-purple-50 border border-dashed border-purple-300 rounded-lg py-2">
+            + 添加本天的条目
+          </button>` : ""}
+      </div>
+    `).join("");
+
+  return `
+    <div class="max-w-5xl mx-auto px-4 py-4">
+      <button onclick="leaveGuide()" class="text-sm text-slate-500 hover:text-slate-700 mb-2">← 返回攻略列表</button>
+
+      <!-- 攻略封面 + 标题 -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
+        ${g.cover_image
+          ? `<img src="${escapeHtml(g.cover_image)}" class="w-full img-thumb" onerror="this.style.display='none'" />`
+          : `<div class="h-32 bg-gradient-to-br from-purple-200 to-pink-200"></div>`}
+        <div class="p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1">
+              <h2 class="text-2xl font-bold text-slate-800">${escapeHtml(g.title)}</h2>
+              <div class="text-sm text-slate-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
+                ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
+                <span>by ${escapeHtml(g.created_by_name || "")}</span>
+                ${g.trip_name ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">📚 ${escapeHtml(g.trip_name)} 的攻略</span>` : `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">👤 个人</span>`}
+              </div>
+              ${g.tags ? `<div class="mt-2 flex flex-wrap gap-1">${g.tags.split(",").filter(Boolean).map(t => `<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
+              ${g.summary ? `<p class="text-sm text-slate-700 mt-3 whitespace-pre-wrap">${escapeHtml(g.summary)}</p>` : ""}
+            </div>
+            ${canEdit ? `
+              <div class="flex flex-col gap-1">
+                <button onclick="showEditGuideModal(${g.id})" class="text-sm text-slate-500 hover:text-indigo-600">✏️ 编辑</button>
+                <button onclick="deleteGuide(${g.id})" class="text-sm text-slate-500 hover:text-red-600">🗑️ 删除</button>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      </div>
+
+      <!-- 天数规划 -->
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-lg font-bold text-slate-800">🗓️ 日程安排</h3>
+        ${canEdit ? `<button onclick="showAddGuideDayModal(${g.id})" class="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 添加天</button>` : ""}
+      </div>
+      ${daysHtml}
+    </div>
+  `;
+}
+
+function renderGuideItem(gid, did, it, canEdit) {
+  return `
+    <div class="bg-slate-50 border border-slate-200 rounded-lg p-3">
+      <div class="flex items-start gap-2">
+        ${it.time ? `<span class="text-xs text-slate-500 font-mono whitespace-nowrap">${escapeHtml(it.time)}</span>` : ""}
+        <div class="flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            ${it.category ? `<span class="text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">${escapeHtml(it.category)}</span>` : ""}
+            <span class="font-medium text-slate-800">${escapeHtml(it.title)}</span>
+          </div>
+          ${it.location ? `<div class="text-sm text-slate-600 mt-0.5">📍 ${escapeHtml(it.location)}</div>` : ""}
+          ${it.address ? `<div class="text-xs text-slate-500 mt-0.5">${escapeHtml(it.address)}</div>` : ""}
+          ${it.description ? `<p class="text-sm text-slate-600 mt-1 whitespace-pre-wrap">${escapeHtml(it.description)}</p>` : ""}
+          ${it.url ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline block mt-1">🔗 ${escapeHtml(it.url)}</a>` : ""}
+          ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mt-2 rounded-lg max-h-32" onerror="this.style.display='none'" />` : ""}
+        </div>
+        ${canEdit ? `
+          <div class="flex gap-1 whitespace-nowrap">
+            <button onclick="showEditGuideItemModal(${gid}, ${did}, ${it.id})" class="text-xs text-slate-500 hover:text-indigo-600">✏️</button>
+            <button onclick="deleteGuideItem(${gid}, ${did}, ${it.id})" class="text-xs text-slate-500 hover:text-red-600">🗑️</button>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+  `;
+}
+
+// ---- Guides: 编辑/添加 modals ----
+
+function showEditGuideModal(gid) {
+  const g = state.currentGuide;
+  if (!g) return;
+  showModal(`
+    <form id="guide-edit-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">编辑攻略</h3>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required maxlength="80" value="${escapeHtml(g.title)}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">目的地</label>
+          <input name="destination" value="${escapeHtml(g.destination || "")}" maxlength="60" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">开始日期</label>
+            <input name="start_date" type="date" value="${escapeHtml(g.start_date || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">结束日期</label>
+            <input name="end_date" type="date" value="${escapeHtml(g.end_date || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL</label>
+          <input name="cover_image" type="url" value="${escapeHtml(g.cover_image || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">标签（逗号分隔）</label>
+          <input name="tags" maxlength="200" value="${escapeHtml(g.tags || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">简介</label>
+          <textarea name="summary" rows="3" maxlength="500" class="w-full border border-slate-300 rounded-lg px-3 py-2">${escapeHtml(g.summary || "")}</textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("guide-edit-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const data = await api(`/api/guides/${gid}`, { method: "PUT", body: JSON.stringify(body) });
+      closeModal();
+      state.currentGuide = data.guide;
+      await loadMyGuides().catch(() => {});
+      toast("已保存", "success");
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+function showAddGuideDayModal(gid) {
+  const g = state.currentGuide;
+  const nextIdx = (g.days || []).length + 1;
+  showModal(`
+    <form id="add-day-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">添加第 ${nextIdx} 天</h3>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">Day 编号</label>
+            <input name="day_index" type="number" min="1" value="${nextIdx}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">日期</label>
+            <input name="day_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">主题</label>
+          <input name="title" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：抵达 + 金阁寺" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">当天笔记</label>
+          <textarea name="notes" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="今天的总览、交通方式、必看、避坑..."></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">添加</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("add-day-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/guides/${gid}/days`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      toast("已添加", "success");
+      await refreshCurrentGuide();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+function showEditGuideDayModal(gid, did) {
+  const d = (state.currentGuide.days || []).find(x => x.id === did);
+  if (!d) return;
+  showModal(`
+    <form id="edit-day-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">编辑第 ${d.day_index} 天</h3>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">Day 编号</label>
+            <input name="day_index" type="number" min="1" value="${d.day_index}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">日期</label>
+            <input name="day_date" type="date" value="${escapeHtml(d.day_date || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">主题</label>
+          <input name="title" value="${escapeHtml(d.title || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">当天笔记</label>
+          <textarea name="notes" rows="3" class="w-full border border-slate-300 rounded-lg px-3 py-2">${escapeHtml(d.notes || "")}</textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("edit-day-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/guides/${gid}/days/${did}`, { method: "PUT", body: JSON.stringify(body) });
+      closeModal();
+      toast("已保存", "success");
+      await refreshCurrentGuide();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteGuideDay(gid, did) {
+  if (!confirm("删除这一天会同时删除它的所有条目，确定吗？")) return;
+  try {
+    await api(`/api/guides/${gid}/days/${did}`, { method: "DELETE" });
+    toast("已删除", "success");
+    await refreshCurrentGuide();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+function showAddGuideItemModal(gid, did) {
+  const cats = ["餐饮", "交通", "景点", "住宿", "购物", "娱乐", "其他"];
+  showModal(`
+    <form id="add-item-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">添加本天的条目</h3>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">时间</label>
+            <input name="time" type="time" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">分类</label>
+            <select name="category" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+              ${cats.map(c => `<option>${c}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required maxlength="80" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：筑地市场早餐" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">地点名</label>
+          <input name="location" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：Tsukiji Outer Market" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">详细地址</label>
+          <input name="address" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">说明</label>
+          <textarea name="description" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：6 点开门，玉子烧必尝"></textarea>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">链接 URL（地图 / 大众点评 / 小红书...）</label>
+          <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
+          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("add-item-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/guides/${gid}/days/${did}/items`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      toast("已添加", "success");
+      await refreshCurrentGuide();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+function showEditGuideItemModal(gid, did, iid) {
+  const item = (state.currentGuide.days || []).flatMap(d => d.items).find(x => x.id === iid);
+  if (!item) return;
+  const cats = ["餐饮", "交通", "景点", "住宿", "购物", "娱乐", "其他"];
+  showModal(`
+    <form id="edit-item-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-4">编辑条目</h3>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">时间</label>
+            <input name="time" type="time" value="${escapeHtml(item.time || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">分类</label>
+            <select name="category" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+              ${cats.map(c => `<option ${item.category === c ? "selected" : ""}>${c}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required value="${escapeHtml(item.title)}" maxlength="80" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">地点名</label>
+          <input name="location" value="${escapeHtml(item.location || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">详细地址</label>
+          <input name="address" value="${escapeHtml(item.address || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">说明</label>
+          <textarea name="description" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2">${escapeHtml(item.description || "")}</textarea>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">链接 URL</label>
+          <input name="url" type="url" value="${escapeHtml(item.url || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
+          <input name="image_url" type="url" value="${escapeHtml(item.image_url || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">保存</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("edit-item-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      await api(`/api/guides/${gid}/days/${did}/items/${iid}`, { method: "PUT", body: JSON.stringify(body) });
+      closeModal();
+      toast("已保存", "success");
+      await refreshCurrentGuide();
+    } catch (err) { toast(err.message, "error"); }
+  };
+}
+
+async function deleteGuideItem(gid, did, iid) {
+  if (!confirm("删除这个条目？")) return;
+  try {
+    await api(`/api/guides/${gid}/days/${did}/items/${iid}`, { method: "DELETE" });
+    toast("已删除", "success");
+    await refreshCurrentGuide();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+async function deleteGuide(gid) {
+  if (!confirm("整个攻略会一并删除（含所有天数+条目），确定吗？")) return;
+  try {
+    await api(`/api/guides/${gid}`, { method: "DELETE" });
+    toast("已删除", "success");
+    state.currentGuide = null;
+    await loadMyGuides().catch(() => {});
+    renderApp();
+  } catch (err) { toast(err.message, "error"); }
+}
+
+async function refreshCurrentGuide() {
+  if (!state.currentGuide) return;
+  const data = await api(`/api/guides/${state.currentGuide.id}`);
+  state.currentGuide = data.guide;
+  await loadMyGuides().catch(() => {});
+  renderApp();
 }
 
 // ========== Trip list view ========================================
@@ -413,6 +985,7 @@ function renderTripView() {
     ["overview", "📋 概览"],
     ["wishlist", "⭐ 想去"],
     ["itinerary", "🗓️ 行程"],
+    ["guides", "📚 攻略"],
     ["hotels", "🏨 酒店"],
     ["meetings", "📍 集合"],
     ["expenses", "💰 费用"],
@@ -422,6 +995,7 @@ function renderTripView() {
     overview: renderOverviewTab(),
     wishlist: renderWishlistTab(),
     itinerary: renderItineraryTab(),
+    guides: renderTripGuidesTab(),
     hotels: renderHotelsTab(),
     meetings: renderMeetingsTab(),
     expenses: renderExpensesTab(),
@@ -473,6 +1047,8 @@ function renderTripView() {
 function leaveTrip() {
   state.currentTrip = null;
   state.members = [];
+  state.tripGuides = [];
+  state.activeTab = "overview";
   localStorage.removeItem(LS_TRIP_ID);
   renderApp();
 }
@@ -1135,6 +1711,91 @@ async function deleteExpense(id) {
     toast("已删除", "success");
     renderApp();
   } catch (err) { toast(err.message, "error"); }
+}
+
+// ========== Tab: Trip Guides (本 trip 的协作攻略) =====================
+function renderTripGuidesTab() {
+  const guides = state.tripGuides || [];
+  return `
+    <div class="flex items-center justify-between mb-3">
+      <div>
+        <p class="text-sm text-slate-500">这次旅行的成员可以共同编辑攻略（比如日程、餐厅、备注）</p>
+      </div>
+      <button onclick="showCreateTripGuideModal()" class="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 新建本 trip 攻略</button>
+    </div>
+    ${guides.length === 0
+      ? `<div class="text-center text-slate-400 py-8">这次旅行还没有攻略</div>`
+      : `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${guides.map(g => `
+            <div onclick="enterGuide(${g.id})" class="bg-white border border-slate-200 rounded-xl overflow-hidden cursor-pointer hover:shadow-md transition">
+              ${g.cover_image
+                ? `<img src="${escapeHtml(g.cover_image)}" class="w-full img-thumb" onerror="this.outerHTML='<div class=&quot;w-full img-thumb bg-slate-100&quot;></div>'" />`
+                : `<div class="w-full img-thumb bg-gradient-to-br from-emerald-200 to-teal-200"></div>`}
+              <div class="p-3">
+                <h4 class="font-bold text-slate-800">${escapeHtml(g.title)}</h4>
+                ${g.destination ? `<div class="text-xs text-slate-500 mt-1">📍 ${escapeHtml(g.destination)}</div>` : ""}
+                <div class="flex items-center justify-between mt-2">
+                  <span class="text-xs text-slate-500">${escapeHtml(g.created_by_name || "")} 创建</span>
+                  <span class="text-xs text-slate-400">${g.day_count || 0} 天</span>
+                </div>
+              </div>
+            </div>
+          `).join("")}
+        </div>`}
+  `;
+}
+
+function showCreateTripGuideModal() {
+  showModal(`
+    <form id="trip-guide-form" class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-2">新建本 trip 的攻略</h3>
+      <p class="text-sm text-slate-500 mb-4">所有旅行成员都能查看和编辑这个攻略</p>
+      <div class="space-y-3">
+        <div><label class="block text-sm text-slate-600 mb-1">标题</label>
+          <input name="title" required maxlength="80" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：京都 5 日攻略" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">目的地</label>
+          <input name="destination" maxlength="60" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block text-sm text-slate-600 mb-1">开始日期</label>
+            <input name="start_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div><label class="block text-sm text-slate-600 mb-1">结束日期</label>
+            <input name="end_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL</label>
+          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">简介</label>
+          <textarea name="summary" rows="2" maxlength="500" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div><label class="block text-sm text-slate-600 mb-1">标签（逗号分隔）</label>
+          <input name="tags" maxlength="200" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="closeModal()" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">取消</button>
+        <button type="submit" class="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg">创建</button>
+      </div>
+    </form>
+  `);
+  document.getElementById("trip-guide-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const data = await api(`/api/trips/${state.currentTrip.id}/guides`, { method: "POST", body: JSON.stringify(body) });
+      closeModal();
+      toast("已创建", "success");
+      // 切到攻略库模式查看
+      state.mode = "guides";
+      state.currentGuide = data.guide;
+      await loadMyGuides().catch(() => {});
+      renderApp();
+    } catch (err) { toast(err.message, "error"); }
+  };
 }
 
 // ========== Tab: Members ==========================================
