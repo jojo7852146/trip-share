@@ -15,6 +15,213 @@
   .balance-neg { color: #dc2626; }
   .balance-zero { color: #6b7280; }
   .img-thumb { aspect-ratio: 16/9; object-fit: cover; }
+
+  /* ========== 图片选择器（URL + 本地上传 切换） ========== */
+  .img-picker {
+    border: 1px dashed #cbd5e1;
+    border-radius: 0.5rem;
+    background: #f8fafc;
+    padding: 0.75rem;
+    transition: all 0.15s ease;
+  }
+  .img-picker.is-dragging {
+    border-color: #6366f1;
+    background: #eef2ff;
+  }
+  .img-picker-preview {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #e2e8f0;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 0.875rem;
+    margin-bottom: 0.5rem;
+    position: relative;
+  }
+  .img-picker-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .img-picker-preview .picker-status {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+  }
+  .img-picker-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .img-picker-tab {
+    flex: 1;
+    padding: 0.375rem 0.5rem;
+    text-align: center;
+    font-size: 0.8125rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    color: #475569;
+  }
+  .img-picker-tab.active {
+    background: #4f46e5;
+    color: #fff;
+    border-color: #4f46e5;
+  }
+  .img-picker-clear {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.375rem;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    background: rgba(15,23,42,0.6);
+    color: #fff;
+    border: none;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.875rem;
+  }
+  .img-picker-preview.has-image .img-picker-clear { display: flex; }
+
+  /* ========== 攻略：杂志/翻页模式 ========== */
+  .guide-magazine {
+    /* 深色英雄区 + 卡片化章节 */
+  }
+  .guide-magazine .hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1rem;
+  }
+  .guide-magazine .hero::after {
+    /* cover image 加暗角 + 渐变 */
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 80%, rgba(0,0,0,0.85) 100%);
+  }
+  .guide-magazine .hero-text {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 1.5rem; z-index: 1; color: #fff;
+  }
+  .guide-magazine .chapter {
+    background: #fff;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border-left: 4px solid #8b5cf6;
+    margin-bottom: 1.25rem;
+    page-break-inside: avoid;
+  }
+  .guide-magazine .chapter-num {
+    display: inline-flex;
+    align-items: center; justify-content: center;
+    width: 3rem; height: 3rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #8b5cf6, #ec4899);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.125rem;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+  }
+  .guide-magazine .timeline {
+    position: relative;
+    padding-left: 1.75rem;
+  }
+  .guide-magazine .timeline::before {
+    content: "";
+    position: absolute;
+    left: 0.6rem; top: 0.5rem; bottom: 0.5rem;
+    width: 2px;
+    background: linear-gradient(180deg, #c4b5fd, #fbcfe8);
+    border-radius: 9999px;
+  }
+  .guide-magazine .timeline-dot {
+    position: absolute;
+    left: -0.65rem;
+    width: 1.75rem; height: 1.75rem;
+    background: #fff;
+    border: 3px solid #8b5cf6;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    box-shadow: 0 2px 6px rgba(139,92,246,0.25);
+  }
+  .guide-magazine .item-card {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 0.875rem 1rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.15s ease;
+  }
+  .guide-magazine .item-card:hover {
+    background: #fff;
+    border-color: #c4b5fd;
+    box-shadow: 0 2px 8px rgba(139,92,246,0.08);
+  }
+  .guide-magazine .item-card .time-badge {
+    display: inline-block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: #6d28d9;
+    background: #ede9fe;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    margin-right: 0.5rem;
+  }
+  .guide-magazine .item-card .category-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    background: #fce7f3;
+    color: #be185d;
+    margin-right: 0.5rem;
+  }
+  .guide-magazine .cover-gradient {
+    background: linear-gradient(135deg, #a78bfa 0%, #f472b6 50%, #fb923c 100%);
+  }
+
+  /* 类别图标映射 */
+  .cat-icon { display: inline-block; }
+
+  /* ========== 打印样式（导览图风 PDF） ========== */
+  @media print {
+    @page { margin: 12mm; size: A4; }
+    body { background: #fff !important; }
+    /* 隐藏导航等无关元素 */
+    .no-print, header, .sticky, button, .modal-root, #modal-root { display: none !important; }
+    /* 攻略详情正文全宽 */
+    #app, .max-w-5xl { max-width: 100% !important; padding: 0 !important; }
+    .guide-magazine .chapter {
+      box-shadow: none;
+      border: 1px solid #e5e7eb;
+      border-left: 4px solid #7c3aed;
+      break-inside: avoid;
+    }
+    .guide-magazine .hero {
+      border-radius: 0;
+      break-after: avoid;
+    }
+    /* 时间线缩进 */
+    .guide-magazine .timeline { padding-left: 1.5rem; }
+    /* URL / QR 后面单独打印 */
+    a { color: #1f2937 !important; text-decoration: none !important; }
+    /* 分页提示 */
+    h2.guide-print-title { break-after: avoid; }
+  }
 </style>
 </head>
 <body class="bg-slate-50 min-h-screen">
@@ -54,6 +261,160 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// 上传图片到 /api/upload，返回 URL 字符串
+async function uploadImageFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const tk = getToken();
+  const res = await fetch(API_BASE + "/api/upload", {
+    method: "POST",
+    headers: tk ? { Authorization: `Bearer ${tk}` } : {},
+    body: fd,
+  });
+  const data = await res.json().catch(() => ({ ok: false, error: "上传失败" }));
+  if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+  return data.url; // e.g. "/uploads/abc123.png"
+}
+
+// 可复用图片选择器：返回一段 HTML（同时承担 URL 输入 + 本地上传）
+//   name: 表单字段名（最终提交的是这个 input.value）
+//   value: 初始值（已存在的 URL）
+//   label: 显示在顶部的标签文字
+//   ratioClass: 可选 "img-thumb" 让预览区按 16:9 裁剪
+function renderImagePicker(name, value = "", label = "图片（可上传或粘贴 URL）", ratioClass = "img-thumb") {
+  const safeVal = escapeHtml(value || "");
+  // 用唯一 ID 绑定事件，避免同页面多个 picker 冲突
+  const uid = "ip_" + Math.random().toString(36).slice(2, 9);
+  return `
+    <div class="img-picker" id="${uid}">
+      <div class="img-picker-preview ${value ? "has-image" : ""} ${ratioClass}">
+        ${value ? `<img src="${safeVal}" onerror="this.style.display='none'" />` : `<span>暂无图片</span>`}
+        <button type="button" class="img-picker-clear" title="清除图片">×</button>
+      </div>
+      <div class="img-picker-tabs">
+        <div class="img-picker-tab active" data-tab="upload">📤 上传本地</div>
+        <div class="img-picker-tab" data-tab="url">🔗 粘贴 URL</div>
+      </div>
+      <div class="img-picker-panel" data-panel="upload">
+        <input type="file" accept="image/*" class="w-full text-sm text-slate-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+        <p class="text-xs text-slate-400 mt-1">支持 jpg/png/gif/webp，最大 10MB。上传后自动填到下方字段。</p>
+      </div>
+      <div class="img-picker-panel" data-panel="url" style="display:none">
+        <input type="url" placeholder="https://..." value="${safeVal}" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+      </div>
+      <!-- 真正随表单提交的值 -->
+      <input type="hidden" name="${name}" value="${safeVal}" />
+    </div>
+  `;
+}
+
+// 把 picker 的事件挂上（每次 modal 打开后由表单 setup 函数调用）
+//   rootSel: 选择器，例如 "#guide-form .img-picker"
+function bindImagePicker(rootSel) {
+  document.querySelectorAll(rootSel).forEach(picker => {
+    if (picker.dataset.bound) return;
+    picker.dataset.bound = "1";
+
+    const preview = picker.querySelector(".img-picker-preview");
+    const hidden = picker.querySelector('input[type="hidden"]');
+    const uploadInput = picker.querySelector('input[type="file"]');
+    const urlInput = picker.querySelector('input[type="url"]');
+    const tabs = picker.querySelectorAll(".img-picker-tab");
+    const panels = picker.querySelectorAll(".img-picker-panel");
+    const clearBtn = picker.querySelector(".img-picker-clear");
+
+    function setPreview(url) {
+      if (url) {
+        preview.innerHTML = `<img src="${escapeHtml(url)}" onerror="this.style.display='none'" /><button type="button" class="img-picker-clear" title="清除图片">×</button>`;
+        preview.classList.add("has-image");
+        hidden.value = url;
+        // 重新绑 clear（innerHTML 清掉了原引用）
+        const newClear = preview.querySelector(".img-picker-clear");
+        newClear.addEventListener("click", (e) => { e.preventDefault(); clearAll(); });
+      } else {
+        preview.innerHTML = `<span>暂无图片</span><button type="button" class="img-picker-clear" title="清除图片">×</button>`;
+        preview.classList.remove("has-image");
+        hidden.value = "";
+        const newClear = preview.querySelector(".img-picker-clear");
+        newClear.addEventListener("click", (e) => { e.preventDefault(); clearAll(); });
+      }
+    }
+
+    function clearAll() {
+      if (uploadInput) uploadInput.value = "";
+      if (urlInput) urlInput.value = "";
+      setPreview("");
+    }
+
+    // tab 切换
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const which = tab.dataset.tab;
+        panels.forEach(p => p.style.display = p.dataset.panel === which ? "" : "none");
+        if (which === "url" && urlInput) urlInput.focus();
+      });
+    });
+
+    // 文件上传
+    if (uploadInput) {
+      uploadInput.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        // 立即给个本地预览（用 FileReader），上传成功后用服务器返回的 URL
+        try {
+          preview.innerHTML = `<span>⏳ 正在上传 ${escapeHtml(file.name)}（${(file.size/1024).toFixed(0)} KB）...</span><button type="button" class="img-picker-clear" title="清除图片" style="display:none">×</button>`;
+        } catch (_) {}
+        try {
+          const url = await uploadImageFile(file);
+          setPreview(url);
+          toast("已上传", "success");
+        } catch (err) {
+          // 失败回滚，恢复原状态
+          setPreview(hidden.value || "");
+          toast(err.message || "上传失败", "error");
+          uploadInput.value = "";
+        }
+      });
+    }
+
+    // URL 输入同步
+    if (urlInput) {
+      urlInput.addEventListener("input", () => {
+        const v = urlInput.value.trim();
+        if (v) {
+          setPreview(v);
+        } else {
+          preview.classList.remove("has-image");
+          preview.querySelector("img")?.remove();
+          hidden.value = "";
+        }
+      });
+    }
+
+    // 拖拽上传
+    picker.addEventListener("dragover", (e) => { e.preventDefault(); picker.classList.add("is-dragging"); });
+    picker.addEventListener("dragleave", () => picker.classList.remove("is-dragging"));
+    picker.addEventListener("drop", (e) => {
+      e.preventDefault();
+      picker.classList.remove("is-dragging");
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file && file.type.startsWith("image/")) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        uploadInput.files = dt.files;
+        uploadInput.dispatchEvent(new Event("change"));
+      } else if (file) {
+        toast("只支持图片文件", "error");
+      }
+    });
+
+    // init：clear 按钮
+    clearBtn.addEventListener("click", (e) => { e.preventDefault(); clearAll(); });
+  });
+}
+
 function escapeHtml(s) {
   if (s == null) return "";
   return String(s).replace(/[&<>"']/g, c => ({
@@ -79,7 +440,7 @@ function copyToClipboard(text) {
 }
 
 // ========== Toast =================================================
-function toast(msg, type = "info") {
+function toast(msg, type = "info", ms) {
   const root = document.getElementById("modal-root");
   const colors = {
     success: "bg-emerald-500",
@@ -88,10 +449,10 @@ function toast(msg, type = "info") {
     warning: "bg-amber-500",
   };
   const el = document.createElement("div");
-  el.className = `fixed top-4 right-4 z-50 ${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm`;
+  el.className = `fixed top-4 right-4 z-50 ${colors[type] || colors.info} text-white px-4 py-2 rounded-lg shadow-lg text-sm max-w-md`;
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2500);
+  setTimeout(() => el.remove(), ms || 2500);
 }
 
 // ========== Modal =================================================
@@ -183,6 +544,7 @@ let state = {
   myGuides: [],           // 我能看见的所有攻略
   tripGuides: [],         // 当前 trip 内的攻略（在 trip-guides tab 用）
   currentGuide: null,     // 攻略详情对象（含 days[]）
+  guideViewMode: "edit",  // "edit" | "magazine"  攻略详情视图模式
 };
 
 async function loadTrip(tripId) {
@@ -329,6 +691,7 @@ function logout() {
     trips: [], currentTrip: null, members: [], activeTab: "overview",
     wishlist: [], itinerary: [], hotels: [], meetings: [], expenses: [], balances: [], groups: [],
     myGuides: [], tripGuides: [], currentGuide: null,
+    guideViewMode: "edit",
   };
   renderAuth("login");
 }
@@ -426,8 +789,8 @@ function showCreatePersonalGuideModal() {
             <input name="end_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
           </div>
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL（可选）</label>
-          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        <div><label class="block text-sm text-slate-600 mb-1">封面图（可选 · 可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("cover_image", "", "")}
         </div>
         <div><label class="block text-sm text-slate-600 mb-1">标签（逗号分隔）</label>
           <input name="tags" maxlength="200" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="比如：自由行,亲子,美食" />
@@ -442,6 +805,7 @@ function showCreatePersonalGuideModal() {
       </div>
     </form>
   `);
+  bindImagePicker("#guide-form .img-picker");
   document.getElementById("guide-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -458,13 +822,80 @@ function showCreatePersonalGuideModal() {
 }
 
 // ========== Guides: 详情 / 编辑 =========================================
+// 视图模式切换：📖 编辑视图 / 🎨 翻页模式（杂志风）
+function setGuideViewMode(mode) {
+  state.guideViewMode = mode;
+  renderApp();
+}
+
+// 类目 → emoji 图标
+function categoryIcon(cat) {
+  const map = {
+    "餐饮": "🍜", "美食": "🍜", "餐厅": "🍽️",
+    "景点": "🏛️", "观光": "🗼", "公园": "🌳",
+    "交通": "🚆", "飞机": "✈️", "打车": "🚖",
+    "住宿": "🏨", "酒店": "🛏️",
+    "购物": "🛍️", "商场": "🏬",
+    "娱乐": "🎭", "演出": "🎫", "夜生活": "🌃",
+    "行程": "📍", "提醒": "⚠️", "tips": "💡",
+  };
+  if (!cat) return "📌";
+  return map[cat] || map[cat.toLowerCase?.()] || "📌";
+}
+
+// 格式化时间，把 "09:30:00" 截成 "09:30"
+function fmtTime(t) {
+  if (!t) return "";
+  return t.slice(0, 5);
+}
+
 function renderGuideDetail() {
   const g = state.currentGuide;
-  // can_edit 默认 true（保护：万一某个接口忘了设置这个字段，用户刚创建时应该是 true）
+  if (!g) return '<div class="p-8 text-center text-slate-400">攻略已被删除</div>';
+  const isMag = state.guideViewMode === "magazine";
+  const body = isMag ? renderGuideDetailMagazine(g) : renderGuideDetailEdit(g);
+
+  return `
+    <div class="max-w-5xl mx-auto px-4 py-4">
+      <!-- 顶部操作条 -->
+      <div class="flex items-center justify-between gap-2 mb-3 no-print">
+        <button onclick="leaveGuide()" class="text-sm text-slate-500 hover:text-slate-700">← 返回攻略列表</button>
+        <div class="flex items-center gap-1 text-xs">
+          <!-- 视图切换 -->
+          <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+            <button onclick="setGuideViewMode('edit')"
+              class="px-2.5 py-1 rounded-md transition ${isMag ? "text-slate-500 hover:text-slate-700" : "bg-purple-600 text-white"}"
+              title="编辑视图：紧凑布局，便于修改">
+              📖 编辑
+            </button>
+            <button onclick="setGuideViewMode('magazine')"
+              class="px-2.5 py-1 rounded-md transition ${isMag ? "bg-pink-600 text-white" : "text-slate-500 hover:text-slate-700"}"
+              title="翻页模式：杂志/导览图风，便于分享">
+              🎨 翻页
+            </button>
+          </div>
+          <!-- 导出菜单 -->
+          <button onclick="openGuideExportMenu(${g.id})"
+            class="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+            📤 导出 ▾
+          </button>
+          ${g.can_edit !== false ? `
+            <button onclick="showEditGuideModal(${g.id})" class="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">✏️</button>
+            <button onclick="deleteGuide(${g.id})" class="px-2.5 py-1 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50">🗑️</button>
+          ` : ""}
+        </div>
+      </div>
+
+      ${body}
+    </div>
+  `;
+}
+
+// ----- 编辑视图（原紧凑布局） -------------------------------------------
+function renderGuideDetailEdit(g) {
   const canEdit = g.can_edit !== false;
   const days = g.days || [];
 
-  // 组装 days 卡片
   const daysHtml = days.length === 0
     ? `<div class="text-center text-slate-400 py-8 bg-white rounded-xl">还没有任何日程，点击下方"+ 添加天"开始规划</div>`
     : days.map(d => `
@@ -499,34 +930,22 @@ function renderGuideDetail() {
     `).join("");
 
   return `
-    <div class="max-w-5xl mx-auto px-4 py-4">
-      <button onclick="leaveGuide()" class="text-sm text-slate-500 hover:text-slate-700 mb-2">← 返回攻略列表</button>
-
+    <div id="guide-detail-edit">
       <!-- 攻略封面 + 标题 -->
       <div class="bg-white rounded-xl shadow-sm overflow-hidden mb-4">
         ${g.cover_image
           ? `<img src="${escapeHtml(g.cover_image)}" class="w-full img-thumb" onerror="this.style.display='none'" />`
           : `<div class="h-32 bg-gradient-to-br from-purple-200 to-pink-200"></div>`}
         <div class="p-4">
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex-1">
-              <h2 class="text-2xl font-bold text-slate-800">${escapeHtml(g.title)}</h2>
-              <div class="text-sm text-slate-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
-                ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
-                <span>by ${escapeHtml(g.created_by_name || "")}</span>
-                ${g.trip_name ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">📚 ${escapeHtml(g.trip_name)} 的攻略</span>` : `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">👤 个人</span>`}
-              </div>
-              ${g.tags ? `<div class="mt-2 flex flex-wrap gap-1">${g.tags.split(",").filter(Boolean).map(t => `<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
-              ${g.summary ? `<p class="text-sm text-slate-700 mt-3 whitespace-pre-wrap">${escapeHtml(g.summary)}</p>` : ""}
-            </div>
-            ${canEdit ? `
-              <div class="flex flex-col gap-1">
-                <button onclick="showEditGuideModal(${g.id})" class="text-sm text-slate-500 hover:text-indigo-600">✏️ 编辑</button>
-                <button onclick="deleteGuide(${g.id})" class="text-sm text-slate-500 hover:text-red-600">🗑️ 删除</button>
-              </div>
-            ` : ""}
+          <h2 class="text-2xl font-bold text-slate-800">${escapeHtml(g.title)}</h2>
+          <div class="text-sm text-slate-500 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+            ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
+            ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
+            <span>by ${escapeHtml(g.created_by_name || "")}</span>
+            ${g.trip_name ? `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">📚 ${escapeHtml(g.trip_name)} 的攻略</span>` : `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">👤 个人</span>`}
           </div>
+          ${g.tags ? `<div class="mt-2 flex flex-wrap gap-1">${g.tags.split(",").filter(Boolean).map(t => `<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
+          ${g.summary ? `<p class="text-sm text-slate-700 mt-3 whitespace-pre-wrap">${escapeHtml(g.summary)}</p>` : ""}
         </div>
       </div>
 
@@ -536,6 +955,133 @@ function renderGuideDetail() {
         ${canEdit ? `<button onclick="showAddGuideDayModal(${g.id})" class="bg-purple-600 hover:bg-purple-700 text-white text-sm px-3 py-1.5 rounded-lg">+ 添加天</button>` : ""}
       </div>
       ${daysHtml}
+    </div>
+  `;
+}
+
+// ----- 翻页模式（杂志/导览图风） -----------------------------------------
+function renderGuideDetailMagazine(g) {
+  const days = g.days || [];
+  const totalItems = days.reduce((sum, d) => sum + (d.items?.length || 0), 0);
+
+  // 章节编号（罗马数字味道）
+  const romanNum = (n) => {
+    const map = {1:"I",2:"II",3:"III",4:"IV",5:"V",6:"VI",7:"VII",8:"VIII",9:"IX",10:"X",11:"XI",12:"XII",13:"XIII",14:"XIV",15:"XV",20:"XX",30:"XXX"};
+    if (n in map) return map[n];
+    if (n > 15 && n < 20) return "XVI-" + romanNum(n - 15);
+    return String(n).padStart(2, "0");
+  };
+
+  // 章节渲染（每章是 1 天）
+  const chapterHtml = days.map((d, di) => {
+    const itemsHtml = (d.items || []).length === 0
+      ? `<div class="text-sm text-slate-400 italic ml-10">本天还没有具体安排</div>`
+      : (d.items || []).map((it, idx) => `
+        <div class="timeline-item relative mb-3" style="padding-left: ${idx === 0 ? "0.25rem" : "0.25rem"}">
+          <div class="timeline-dot">${categoryIcon(it.category)}</div>
+          <div class="item-card ml-2">
+            <div class="flex items-start gap-2 flex-wrap">
+              ${it.time ? `<span class="time-badge">${escapeHtml(fmtTime(it.time))}</span>` : ""}
+              ${it.category ? `<span class="category-badge">${escapeHtml(it.category)}</span>` : ""}
+              <span class="font-medium text-slate-800">${escapeHtml(it.title)}</span>
+            </div>
+            ${it.location ? `<div class="text-sm text-slate-600 mt-1">📍 ${escapeHtml(it.location)}</div>` : ""}
+            ${it.address ? `<div class="text-xs text-slate-500 mt-0.5">${escapeHtml(it.address)}</div>` : ""}
+            ${it.description ? `<p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap">${escapeHtml(it.description)}</p>` : ""}
+            ${it.url ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline block mt-2">🔗 ${escapeHtml(it.url)}</a>` : ""}
+            ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mt-2 rounded-lg max-w-full max-h-48 object-cover" onerror="this.style.display='none'" />` : ""}
+          </div>
+        </div>
+      `).join("");
+
+    return `
+      <div class="guide-magazine">
+        <section class="chapter">
+          <div class="flex items-start gap-4 mb-3">
+            <div class="chapter-num">${romanNum(d.day_index)}</div>
+            <div class="flex-1">
+              <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold">Day ${d.day_index} · ${escapeHtml(d.day_date || "")}</div>
+              <h3 class="text-2xl font-bold text-slate-800 mt-1">${escapeHtml(d.title || "")}</h3>
+              ${d.notes ? `<p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap">${escapeHtml(d.notes)}</p>` : ""}
+            </div>
+          </div>
+          <div class="timeline">
+            ${itemsHtml}
+          </div>
+        </section>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div id="guide-detail-magazine" class="guide-magazine">
+      <!-- 顶部英雄区：封面 + 大标题 -->
+      <div class="hero mb-6">
+        ${g.cover_image
+          ? `<img src="${escapeHtml(g.cover_image)}" class="w-full h-64 sm:h-80 object-cover" onerror="this.outerHTML='<div class=&quot;w-full h-64 sm:h-80 cover-gradient&quot;></div>'" />`
+          : `<div class="w-full h-64 sm:h-80 cover-gradient"></div>`}
+        <div class="hero-text">
+          <div class="text-xs uppercase tracking-widest text-purple-200 font-semibold mb-2">Travel Guide</div>
+          <h1 class="guide-print-title text-3xl sm:text-4xl font-extrabold leading-tight drop-shadow-lg">${escapeHtml(g.title)}</h1>
+          <div class="text-sm text-white/90 mt-2 flex flex-wrap gap-x-3 gap-y-1">
+            ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
+            ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
+            <span>by ${escapeHtml(g.created_by_name || "")}</span>
+          </div>
+          ${g.tags ? `<div class="mt-3 flex flex-wrap gap-1">${g.tags.split(",").filter(Boolean).map(t => `<span class="text-xs px-2 py-0.5 rounded-full bg-white/20 backdrop-blur text-white">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
+        </div>
+      </div>
+
+      <!-- 简介 -->
+      ${g.summary ? `
+        <div class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+          <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-2">关于这次旅行</div>
+          <p class="text-base text-slate-700 whitespace-pre-wrap leading-relaxed">${escapeHtml(g.summary)}</p>
+        </div>
+      ` : ""}
+
+      <!-- 摘要数据 -->
+      <div class="grid grid-cols-3 gap-3 mb-6">
+        <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+          <div class="text-3xl font-extrabold text-purple-600">${days.length}</div>
+          <div class="text-xs text-slate-500 mt-1">天数</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+          <div class="text-3xl font-extrabold text-pink-500">${totalItems}</div>
+          <div class="text-xs text-slate-500 mt-1">安排条目</div>
+        </div>
+        <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+          <div class="text-3xl">${g.trip_name ? "📚" : "👤"}</div>
+          <div class="text-xs text-slate-500 mt-1">${g.trip_name ? escapeHtml(g.trip_name) : "个人"}</div>
+        </div>
+      </div>
+
+      <!-- 目录 -->
+      ${days.length > 0 ? `
+        <div class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+          <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-3">目录</div>
+          <ol class="space-y-1.5 text-sm text-slate-700">
+            ${days.map(d => `
+              <li class="flex items-baseline gap-3">
+                <span class="text-purple-400 font-mono text-xs w-12">D${String(d.day_index).padStart(2, "0")}</span>
+                <span class="flex-1">${escapeHtml(d.title || "(未命名)")}</span>
+                <span class="text-xs text-slate-400">${d.items?.length || 0} 条</span>
+              </li>
+            `).join("")}
+          </ol>
+        </div>
+      ` : ""}
+
+      <!-- 章节 -->
+      <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-3">📖 详细行程</div>
+      ${days.length === 0
+        ? `<div class="text-center text-slate-400 py-12 bg-white rounded-xl">还没有任何日程</div>`
+        : chapterHtml}
+
+      <!-- 页脚 -->
+      <div class="mt-8 mb-4 text-center text-xs text-slate-400">
+        本攻略由 trip-share · 旅行共享 生成
+      </div>
     </div>
   `;
 }
@@ -567,6 +1113,235 @@ function renderGuideItem(gid, did, it, canEdit) {
   `;
 }
 
+// ========== Guides: 导出 / 分享 ==========================================
+
+// 打开导出菜单模态框
+async function openGuideExportMenu(gid) {
+  const g = state.currentGuide;
+  if (!g || g.id !== gid) return;
+
+  // 检查当前是否有 share_token（从最近一次 GET 的字段）
+  const currentToken = g.share_token || null;
+
+  showModal(`
+    <div class="p-6">
+      <h3 class="text-lg font-bold text-slate-800 mb-1">📤 导出 / 分享攻略</h3>
+      <p class="text-sm text-slate-500 mb-4">选一个方式把这本攻略发给别人或留个底</p>
+
+      <div class="space-y-3">
+        <!-- PDF (window.print) -->
+        <button id="exp-btn-pdf"
+          class="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-purple-400 hover:bg-purple-50 transition">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">📄</span>
+            <div class="flex-1">
+              <div class="font-bold text-slate-800">导出为 PDF（导览图风）</div>
+              <div class="text-xs text-slate-500 mt-0.5">自动切换到翻页模式，再用浏览器"打印 → 另存为 PDF"，效果最美观</div>
+            </div>
+            <span class="text-purple-600">→</span>
+          </div>
+        </button>
+
+        <!-- Markdown -->
+        <button id="exp-btn-md"
+          class="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-purple-400 hover:bg-purple-50 transition">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">📋</span>
+            <div class="flex-1">
+              <div class="font-bold text-slate-800">复制 Markdown</div>
+              <div class="text-xs text-slate-500 mt-0.5">粘到 Notion、语雀、博客或微信里都行</div>
+            </div>
+            <span class="text-purple-600">→</span>
+          </div>
+        </button>
+
+        <!-- 公开链接 -->
+        <div class="rounded-xl border ${currentToken ? "border-emerald-300 bg-emerald-50" : "border-slate-200"} p-4">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="text-3xl">🔗</span>
+            <div class="flex-1">
+              <div class="font-bold text-slate-800">公开分享链接</div>
+              <div class="text-xs text-slate-500 mt-0.5">${currentToken ? "已开启，任何人都能通过这个链接查看（只读）" : "未开启，开启后会生成一个谁都能看的链接"}</div>
+            </div>
+          </div>
+          ${currentToken ? `
+            <div class="flex items-center gap-2 mt-3">
+              <input id="exp-share-url" readonly value="${escapeHtml(window.location.origin + "/p/" + currentToken)}"
+                class="flex-1 text-xs px-2 py-1.5 border border-slate-300 rounded-lg bg-white font-mono" />
+              <button onclick="copyShareLinkFromInput()" class="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg">复制</button>
+            </div>
+            <button id="exp-btn-unshare" class="mt-3 w-full text-xs text-red-600 hover:bg-red-50 border border-red-200 rounded-lg py-2">关闭公开链接</button>
+          ` : `
+            <button id="exp-btn-share"
+              class="mt-1 w-full bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg py-2">
+              🔓 开启公开链接
+            </button>
+          `}
+        </div>
+      </div>
+
+      <button onclick="closeModal()" class="mt-5 w-full px-4 py-2 border border-slate-300 rounded-lg text-slate-700 text-sm">关闭</button>
+    </div>
+  `);
+
+  document.getElementById("exp-btn-pdf").onclick = () => {
+    closeModal();
+    exportGuidePDF();
+  };
+  document.getElementById("exp-btn-md").onclick = () => {
+    exportGuideMarkdown(g);
+    closeModal();
+  };
+  const shareBtn = document.getElementById("exp-btn-share");
+  if (shareBtn) {
+    shareBtn.onclick = async () => {
+      try {
+        await enableGuideShare(g.id);
+        // 重新拉一份拿到 token
+        const fresh = await api(`/api/guides/${g.id}`);
+        state.currentGuide = fresh.guide;
+        openGuideExportMenu(g.id);  // 刷新模态框显示链接
+        toast("公开链接已开启", "success");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    };
+  }
+  const unshareBtn = document.getElementById("exp-btn-unshare");
+  if (unshareBtn) {
+    unshareBtn.onclick = async () => {
+      if (!confirm("关闭公开链接后，之前的链接会失效。继续？")) return;
+      try {
+        await api(`/api/guides/${g.id}/share`, { method: "DELETE" });
+        const fresh = await api(`/api/guides/${g.id}`);
+        state.currentGuide = fresh.guide;
+        openGuideExportMenu(g.id);
+        toast("公开链接已关闭", "info");
+      } catch (err) {
+        toast(err.message, "error");
+      }
+    };
+  }
+}
+
+async function enableGuideShare(gid) {
+  const r = await api(`/api/guides/${gid}/share`, { method: "POST" });
+  return r.share_token;
+}
+
+function copyShareLinkFromInput() {
+  const input = document.getElementById("exp-share-url");
+  if (!input) return;
+  // 选中内容并复制
+  input.select();
+  try {
+    document.execCommand("copy");
+    toast("公开链接已复制到剪贴板", "success");
+  } catch (e) {
+    // fallback
+    navigator.clipboard?.writeText(input.value);
+    toast("已复制", "success");
+  }
+}
+
+// --- 导出 PDF：自动切到翻页模式 → 调浏览器 print ---
+function exportGuidePDF() {
+  // 1. 切到翻页模式（如果当前不是）
+  if (state.guideViewMode !== "magazine") {
+    state.guideViewMode = "magazine";
+    renderApp();
+  }
+  // 2. 等 DOM 渲染完再调用打印
+  setTimeout(() => {
+    toast("💡 浏览器弹出后选'另存为 PDF'，A4 纵向，背景图形要打勾", "info", 5000);
+    window.print();
+  }, 100);
+}
+
+// --- 导出 Markdown：复制到剪贴板 ---
+function guideToMarkdown(g) {
+  const lines = [];
+  lines.push(`# ${g.title}`);
+  lines.push("");
+  const meta = [];
+  if (g.destination) meta.push(`📍 ${g.destination}`);
+  if (g.start_date) meta.push(`📅 ${g.start_date} → ${g.end_date || ""}`);
+  if (g.created_by_name) meta.push(`by ${g.created_by_name}`);
+  if (g.trip_name) meta.push(`📚 ${g.trip_name}`);
+  else meta.push(`👤 个人攻略`);
+  if (meta.length) {
+    lines.push(meta.join("  ·  "));
+    lines.push("");
+  }
+  if (g.tags) {
+    const tags = g.tags.split(",").filter(Boolean).map(t => `#${t.trim().replace(/\s+/g, "_")}`).join(" ");
+    if (tags) { lines.push(tags); lines.push(""); }
+  }
+  if (g.summary) {
+    lines.push(g.summary);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+  const days = g.days || [];
+  if (days.length === 0) {
+    lines.push("_（还没有日程）_");
+  }
+  days.forEach(d => {
+    lines.push(`## Day ${d.day_index}${d.day_date ? ` · ${d.day_date}` : ""} — ${d.title || ""}`);
+    if (d.notes) {
+      lines.push("");
+      lines.push(d.notes);
+    }
+    lines.push("");
+    if (!d.items || d.items.length === 0) {
+      lines.push("（本天暂无具体安排）");
+      lines.push("");
+    } else {
+      d.items.forEach(it => {
+        const head = [];
+        if (it.time) head.push(`\`${it.time.slice(0,5)}\``);
+        if (it.category) head.push(`**${it.category}**`);
+        head.push(`**${it.title}**`);
+        lines.push(`- ${head.join(" · ")}`);
+        if (it.location) lines.push(`  - 📍 ${it.location}`);
+        if (it.address) lines.push(`  - ${it.address}`);
+        if (it.description) lines.push(`  - ${it.description}`);
+        if (it.url) lines.push(`  - 🔗 <${it.url}>`);
+      });
+      lines.push("");
+    }
+  });
+  lines.push("---");
+  lines.push(`_由 trip-share · 旅行共享 生成_`);
+  return lines.join("\n");
+}
+
+async function exportGuideMarkdown(g) {
+  const md = guideToMarkdown(g);
+  try {
+    await navigator.clipboard.writeText(md);
+    toast("Markdown 已复制到剪贴板", "success");
+  } catch (e) {
+    // fallback：用 textarea + execCommand
+    const ta = document.createElement("textarea");
+    ta.value = md;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      toast("Markdown 已复制到剪贴板", "success");
+    } catch (e2) {
+      toast("复制失败，请手动选取", "error");
+    } finally {
+      ta.remove();
+    }
+  }
+}
+
+
 // ---- Guides: 编辑/添加 modals ----
 
 function showEditGuideModal(gid) {
@@ -590,8 +1365,8 @@ function showEditGuideModal(gid) {
             <input name="end_date" type="date" value="${escapeHtml(g.end_date || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
           </div>
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL</label>
-          <input name="cover_image" type="url" value="${escapeHtml(g.cover_image || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        <div><label class="block text-sm text-slate-600 mb-1">封面图（可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("cover_image", g.cover_image || "", "")}
         </div>
         <div><label class="block text-sm text-slate-600 mb-1">标签（逗号分隔）</label>
           <input name="tags" maxlength="200" value="${escapeHtml(g.tags || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
@@ -606,6 +1381,7 @@ function showEditGuideModal(gid) {
       </div>
     </form>
   `);
+  bindImagePicker("#guide-edit-form .img-picker");
   document.getElementById("guide-edit-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -743,8 +1519,8 @@ function showAddGuideItemModal(gid, did) {
         <div><label class="block text-sm text-slate-600 mb-1">链接 URL（地图 / 大众点评 / 小红书...）</label>
           <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
-          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        <div><label class="block text-sm text-slate-600 mb-1">图片（可选 · 可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("image_url", "", "")}
         </div>
       </div>
       <div class="flex gap-2 mt-5">
@@ -753,6 +1529,7 @@ function showAddGuideItemModal(gid, did) {
       </div>
     </form>
   `);
+  bindImagePicker("#add-item-form .img-picker");
   document.getElementById("add-item-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -799,8 +1576,8 @@ function showEditGuideItemModal(gid, did, iid) {
         <div><label class="block text-sm text-slate-600 mb-1">链接 URL</label>
           <input name="url" type="url" value="${escapeHtml(item.url || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
-          <input name="image_url" type="url" value="${escapeHtml(item.image_url || "")}" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        <div><label class="block text-sm text-slate-600 mb-1">图片（可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("image_url", item.image_url || "", "")}
         </div>
       </div>
       <div class="flex gap-2 mt-5">
@@ -809,6 +1586,7 @@ function showEditGuideItemModal(gid, did, iid) {
       </div>
     </form>
   `);
+  bindImagePicker("#edit-item-form .img-picker");
   document.getElementById("edit-item-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -921,8 +1699,8 @@ function showCreateTripModal() {
           </div>
         </div>
         <div>
-          <label class="block text-sm text-slate-600 mb-1">封面图 URL（可选）</label>
-          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+          <label class="block text-sm text-slate-600 mb-1">封面图（可选 · 可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("cover_image", "", "")}
         </div>
       </div>
       <div class="flex gap-2 mt-5">
@@ -931,6 +1709,7 @@ function showCreateTripModal() {
       </div>
     </form>
   `);
+  bindImagePicker("#create-trip-form .img-picker");
   document.getElementById("create-trip-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1147,7 +1926,7 @@ function showWishlistForm() {
           <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
         </div>
         <div><label class="block text-sm text-slate-600 mb-1">图片 URL（可选）</label>
-          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+          ${renderImagePicker("image_url", "", "")}
         </div>
         <div><label class="block text-sm text-slate-600 mb-1">说明（为什么要去、路线备注）</label>
           <textarea name="description" rows="2" maxlength="300" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
@@ -1159,6 +1938,7 @@ function showWishlistForm() {
       </div>
     </form>
   `);
+  bindImagePicker("#wishlist-form .img-picker");
   document.getElementById("wishlist-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1261,8 +2041,8 @@ function showItineraryForm() {
         <div><label class="block text-sm text-slate-600 mb-1">链接 URL</label>
           <input name="url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">图片 URL</label>
-          <input name="image_url" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" placeholder="https://..." />
+        <div><label class="block text-sm text-slate-600 mb-1">图片（可选 · 可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("image_url", "", "")}
         </div>
       </div>
       <div class="flex gap-2 mt-5">
@@ -1271,6 +2051,7 @@ function showItineraryForm() {
       </div>
     </form>
   `);
+  bindImagePicker("#itin-form .img-picker");
   document.getElementById("itin-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -1765,8 +2546,8 @@ function showCreateTripGuideModal() {
             <input name="end_date" type="date" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
           </div>
         </div>
-        <div><label class="block text-sm text-slate-600 mb-1">封面图 URL</label>
-          <input name="cover_image" type="url" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+        <div><label class="block text-sm text-slate-600 mb-1">封面图（可上传本地或粘贴 URL）</label>
+          ${renderImagePicker("cover_image", "", "")}
         </div>
         <div><label class="block text-sm text-slate-600 mb-1">简介</label>
           <textarea name="summary" rows="2" maxlength="500" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
@@ -1781,6 +2562,7 @@ function showCreateTripGuideModal() {
       </div>
     </form>
   `);
+  bindImagePicker("#trip-guide-form .img-picker");
   document.getElementById("trip-guide-form").onsubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);

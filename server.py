@@ -709,6 +709,87 @@ def delete_guide_item_endpoint(guide_id, day_id, item_id):
         return jsonify({"ok": True})
 
 
+# --- Share token (公开链接分享) ------------------------------------------
+
+@app.route("/api/guides/<int:guide_id>/share", methods=["POST"])
+@require_auth
+def enable_share(guide_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权分享该攻略"}), 403
+        token = db.enable_share_token(conn, guide_id)
+        return jsonify({"ok": True, "share_token": token})
+
+
+@app.route("/api/guides/<int:guide_id>/share", methods=["DELETE"])
+@require_auth
+def disable_share(guide_id):
+    with db.get_db() as conn:
+        if not db.is_guide_editor(conn, guide_id, request.user_id):
+            return jsonify({"ok": False, "error": "无权操作该攻略"}), 403
+        db.disable_share_token(conn, guide_id)
+        return jsonify({"ok": True})
+
+
+# --- Public (no-auth) read-only endpoint for share token -----------------
+
+@app.route("/api/public/guide/<token>", methods=["GET"])
+def public_get_guide(token):
+    """任何人凭 token 都可以只看，不能改。"""
+    if not token or len(token) > 64:
+        return jsonify({"ok": False, "error": "无效的分享链接"}), 404
+    with db.get_db() as conn:
+        guide = db.get_guide_by_share_token(conn, token)
+        if not guide:
+            return jsonify({"ok": False, "error": "分享链接已失效"}), 404
+        # 不返回 user_id 等敏感字段
+        guide.pop("user_id", None)
+        return jsonify({"ok": True, "guide": guide})
+
+
+# --- Static: 公开分享页面（独立 HTML，不用登录即可查看） -------------------
+
+@app.route("/p/<token>", methods=["GET"])
+def public_share_page(token):
+    return send_from_directory("static", "share.html")
+
+
+# --- Upload: 图片直传 -----------------------------------------------------
+# 前端攻略条目（item）的封面/配图可以选 URL 或本地上传
+# 上传后存到 static/uploads/，返回 /uploads/xxx.xxx 相对路径
+# 上传只需登录（任意用户都可以），不做 owner 校验——图片本身不敏感
+
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "static", "uploads")
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+MAX_BYTES = 10 * 1024 * 1024  # 10MB
+
+@app.route("/api/upload", methods=["POST"])
+@require_auth
+def upload_image():
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "没收到文件，请用 'file' 字段"}), 400
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "文件名为空"}), 400
+
+    # 安全：扩展名白名单 + 大小限制
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ALLOWED_EXTS:
+        return jsonify({"ok": False, "error": f"只支持 {', '.join(sorted(ALLOWED_EXTS))}"}), 400
+    # 读 bytes 检查大小（避免内存打爆）
+    data = f.read()
+    if len(data) > MAX_BYTES:
+        return jsonify({"ok": False, "error": f"文件太大（>{MAX_BYTES // 1024 // 1024}MB）"}), 400
+    if len(data) == 0:
+        return jsonify({"ok": False, "error": "空文件"}), 400
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    name = secrets.token_urlsafe(16) + ext
+    with open(os.path.join(UPLOAD_DIR, name), "wb") as fp:
+        fp.write(data)
+    return jsonify({"ok": True, "url": f"/uploads/{name}", "bytes": len(data)})
+
+
 # --- Entry ----------------------------------------------------------------
 
 if __name__ == "__main__":

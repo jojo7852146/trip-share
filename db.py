@@ -207,9 +207,16 @@ CREATE TABLE IF NOT EXISTS travel_guides (
     start_date TEXT,
     end_date TEXT,
     tags TEXT,
+    share_token TEXT UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 已建表后加 share_token 列（仅 Postgres / 9.6+）
+ALTER TABLE travel_guides ADD COLUMN IF NOT EXISTS share_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_guides_share_token_unique
+    ON travel_guides(share_token)
+    WHERE share_token IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS travel_guide_days (
     id SERIAL PRIMARY KEY,
@@ -884,6 +891,54 @@ def get_guide_full(conn, guide_id):
         })
     guide["days"] = days_full
     return guide
+
+
+# --- Share token helpers (公开分享链接用) -------------------------------
+
+def enable_share_token(conn, guide_id):
+    """生成一个 token，写回并返回。已存在则直接复用。"""
+    with conn.cursor() as cur:
+        cur.execute("SELECT share_token FROM travel_guides WHERE id=%s", (guide_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        token = row["share_token"] or ''.join(
+            secrets.choice(string.ascii_letters + string.digits) for _ in range(20)
+        )
+        cur.execute("UPDATE travel_guides SET share_token=%s WHERE id=%s", (token, guide_id))
+        cur.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=%s", (guide_id,))
+        return token
+
+
+def disable_share_token(conn, guide_id):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE travel_guides SET share_token=NULL WHERE id=%s", (guide_id,))
+        cur.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=%s", (guide_id,))
+
+
+def get_guide_by_share_token(conn, token):
+    """用公开 token 拿攻略（不需要登录）。"""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT g.*, u.display_name AS created_by_name, t.name AS trip_name
+            FROM travel_guides g
+            JOIN users u ON u.id = g.user_id
+            LEFT JOIN trips t ON t.id = g.trip_id
+            WHERE g.share_token = %s
+        """, (token,))
+        guide = cur.fetchone()
+        if not guide:
+            return None
+        days = list_guide_days(conn, guide["id"])
+        days_full = []
+        for d in days:
+            items = list_guide_items(conn, d["id"])
+            days_full.append({
+                **dict(d),
+                "items": [dict(i) for i in items]
+            })
+        guide["days"] = days_full
+        return guide
 
 
 if __name__ == "__main__":

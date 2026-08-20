@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS travel_guides (
     start_date TEXT,
     end_date TEXT,
     tags TEXT,
+    share_token TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
@@ -202,6 +203,15 @@ def get_db():
 def init_db():
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        # SQLite 不支持 ADD COLUMN IF NOT EXISTS，给老库做轻量升级
+        cur = conn.execute("PRAGMA table_info(travel_guides)")
+        cols = {row[1] for row in cur.fetchall()}
+        if "share_token" not in cols:
+            conn.execute("ALTER TABLE travel_guides ADD COLUMN share_token TEXT")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_guides_share_token_unique "
+                "ON travel_guides(share_token) WHERE share_token IS NOT NULL"
+            )
 
 
 def generate_invite_code():
@@ -742,6 +752,47 @@ def get_guide_full(conn, guide_id):
             **d,
             "items": items,
         })
+    guide["days"] = days_full
+    return guide
+
+
+# --- Share token helpers (SQLite) -----------------------------------------
+
+def enable_share_token(conn, guide_id):
+    row = conn.execute(
+        "SELECT share_token FROM travel_guides WHERE id=?", (guide_id,)
+    ).fetchone()
+    if not row:
+        return None
+    token = row["share_token"] or ''.join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(20)
+    )
+    conn.execute("UPDATE travel_guides SET share_token=? WHERE id=?", (token, guide_id))
+    conn.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (guide_id,))
+    return token
+
+
+def disable_share_token(conn, guide_id):
+    conn.execute("UPDATE travel_guides SET share_token=NULL WHERE id=?", (guide_id,))
+    conn.execute("UPDATE travel_guides SET updated_at=CURRENT_TIMESTAMP WHERE id=?", (guide_id,))
+
+
+def get_guide_by_share_token(conn, token):
+    row = conn.execute("""
+        SELECT g.*, u.display_name AS created_by_name, t.name AS trip_name
+        FROM travel_guides g
+        JOIN users u ON u.id = g.user_id
+        LEFT JOIN trips t ON t.id = g.trip_id
+        WHERE g.share_token=?
+    """, (token,)).fetchone()
+    if not row:
+        return None
+    guide = dict(row)
+    days = list_guide_days(conn, guide["id"])
+    days_full = []
+    for d in days:
+        items = list_guide_items(conn, d["id"])
+        days_full.append({**d, "items": items})
     guide["days"] = days_full
     return guide
 

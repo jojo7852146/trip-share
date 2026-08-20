@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>旅行攻略 · 分享</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  .guide-magazine .hero { position: relative; overflow: hidden; border-radius: 1rem; }
+  .guide-magazine .hero::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.65) 80%, rgba(0,0,0,0.85) 100%);
+  }
+  .guide-magazine .hero-text {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 1.5rem; z-index: 1; color: #fff;
+  }
+  .guide-magazine .chapter {
+    background: #fff;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border-left: 4px solid #8b5cf6;
+    margin-bottom: 1.25rem;
+    page-break-inside: avoid;
+  }
+  .guide-magazine .chapter-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 3rem; height: 3rem; border-radius: 9999px;
+    background: linear-gradient(135deg, #8b5cf6, #ec4899);
+    color: #fff; font-weight: 700; font-size: 1.125rem;
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+  }
+  .guide-magazine .timeline { position: relative; padding-left: 1.75rem; }
+  .guide-magazine .timeline::before {
+    content: ""; position: absolute;
+    left: 0.6rem; top: 0.5rem; bottom: 0.5rem; width: 2px;
+    background: linear-gradient(180deg, #c4b5fd, #fbcfe8);
+    border-radius: 9999px;
+  }
+  .guide-magazine .timeline-dot {
+    position: absolute; left: -0.65rem;
+    width: 1.75rem; height: 1.75rem;
+    background: #fff; border: 3px solid #8b5cf6;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem;
+    box-shadow: 0 2px 6px rgba(139,92,246,0.25);
+  }
+  .guide-magazine .item-card {
+    background: #fafafa; border: 1px solid #e5e7eb;
+    border-radius: 0.75rem; padding: 0.875rem 1rem; margin-bottom: 0.75rem;
+  }
+  .guide-magazine .item-card .time-badge {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 0.75rem; color: #6d28d9; background: #ede9fe;
+    padding: 0.125rem 0.5rem; border-radius: 9999px; margin-right: 0.5rem;
+  }
+  .guide-magazine .item-card .category-badge {
+    display: inline-block;
+    font-size: 0.7rem; padding: 0.125rem 0.5rem;
+    border-radius: 9999px; background: #fce7f3; color: #be185d;
+    margin-right: 0.5rem;
+  }
+  .guide-magazine .cover-gradient {
+    background: linear-gradient(135deg, #a78bfa 0%, #f472b6 50%, #fb923c 100%);
+  }
+
+  @media print {
+    @page { margin: 12mm; size: A4; }
+    body { background: #fff !important; }
+    .no-print, .no-pdf { display: none !important; }
+    .guide-magazine .chapter {
+      box-shadow: none; border: 1px solid #e5e7eb;
+      border-left: 4px solid #7c3aed; break-inside: avoid;
+    }
+    .guide-magazine .hero { border-radius: 0; break-after: avoid; }
+    a { color: #1f2937 !important; text-decoration: none !important; }
+  }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+
+<!-- 顶栏：logo + 品牌 -->
+<div class="bg-white shadow-sm sticky top-0 z-30 no-print">
+  <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="text-2xl">🌴</span>
+      <a href="/" class="font-bold text-slate-800">旅行共享 · Trip Share</a>
+    </div>
+    <div class="text-xs text-slate-500">公开分享页 · 只读</div>
+  </div>
+</div>
+
+<!-- 加载状态 / 错误 / 正文 -->
+<div id="root" class="max-w-4xl mx-auto px-4 py-6">
+  <div class="text-center text-slate-500 py-12">
+    <div class="text-5xl mb-3">⏳</div>
+    <div>加载中...</div>
+  </div>
+</div>
+
+<script>
+  // ---- helpers ----
+  function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+  function fmtTime(t) {
+    if (!t) return "";
+    return t.slice(0, 5);
+  }
+  function categoryIcon(cat) {
+    const map = {
+      "餐饮":"🍜","美食":"🍜","餐厅":"🍽️",
+      "景点":"🏛️","观光":"🗼","公园":"🌳",
+      "交通":"🚆","飞机":"✈️","打车":"🚖",
+      "住宿":"🏨","酒店":"🛏️",
+      "购物":"🛍️","商场":"🏬",
+      "娱乐":"🎭","演出":"🎫","夜生活":"🌃",
+      "行程":"📍","提醒":"⚠️","tips":"💡",
+    };
+    if (!cat) return "📌";
+    return map[cat] || map[cat.toLowerCase?.()] || "📌";
+  }
+  function romanNum(n) {
+    const map = {1:"I",2:"II",3:"III",4:"IV",5:"V",6:"VI",7:"VII",8:"VIII",9:"IX",10:"X",11:"XI",12:"XII",13:"XIII",14:"XIV",15:"XV"};
+    return map[n] || String(n).padStart(2, "0");
+  }
+
+  // ---- 加载公开攻略 ----
+  function getTokenFromUrl() {
+    const m = location.pathname.match(/^\/p\/([A-Za-z0-9_-]+)\/?$/);
+    return m ? m[1] : null;
+  }
+
+  async function loadPublicGuide(token) {
+    const root = document.getElementById("root");
+    try {
+      const res = await fetch(`/api/public/guide/${encodeURIComponent(token)}`);
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        renderNotFound(data.error || "分享链接已失效");
+        return;
+      }
+      document.title = `${data.guide.title} · 旅行共享`;
+      renderGuide(data.guide);
+    } catch (e) {
+      renderNotFound("网络错误，请刷新重试");
+    }
+  }
+
+  function renderNotFound(msg) {
+    document.getElementById("root").innerHTML = `
+      <div class="bg-white rounded-2xl p-12 text-center shadow-sm">
+        <div class="text-6xl mb-3">🔗</div>
+        <h2 class="text-xl font-bold text-slate-800 mb-2">链接打不开</h2>
+        <p class="text-sm text-slate-500 mb-6">${escapeHtml(msg)}</p>
+        <a href="/" class="inline-block px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium">
+          看看其他攻略 →
+        </a>
+      </div>
+    `;
+  }
+
+  function renderGuide(g) {
+    const days = g.days || [];
+    const totalItems = days.reduce((sum, d) => sum + (d.items?.length || 0), 0);
+    document.getElementById("root").innerHTML = renderGuideHTML(g, days, totalItems);
+  }
+
+  function renderGuideHTML(g, days, totalItems) {
+    const chapterHtml = days.map(d => {
+      const itemsHtml = (d.items || []).length === 0
+        ? `<div class="text-sm text-slate-400 italic ml-10">本天还没有具体安排</div>`
+        : (d.items || []).map(it => `
+          <div class="relative mb-3" style="padding-left: 0.25rem;">
+            <div class="timeline-dot">${categoryIcon(it.category)}</div>
+            <div class="item-card ml-2">
+              <div class="flex items-start gap-2 flex-wrap">
+                ${it.time ? `<span class="time-badge">${escapeHtml(fmtTime(it.time))}</span>` : ""}
+                ${it.category ? `<span class="category-badge">${escapeHtml(it.category)}</span>` : ""}
+                <span class="font-medium text-slate-800">${escapeHtml(it.title)}</span>
+              </div>
+              ${it.location ? `<div class="text-sm text-slate-600 mt-1">📍 ${escapeHtml(it.location)}</div>` : ""}
+              ${it.address ? `<div class="text-xs text-slate-500 mt-0.5">${escapeHtml(it.address)}</div>` : ""}
+              ${it.description ? `<p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap">${escapeHtml(it.description)}</p>` : ""}
+              ${it.url ? `<a href="${escapeHtml(it.url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 hover:underline block mt-2">🔗 ${escapeHtml(it.url)}</a>` : ""}
+              ${it.image_url ? `<img src="${escapeHtml(it.image_url)}" class="mt-2 rounded-lg max-w-full max-h-48 object-cover" onerror="this.style.display='none'" />` : ""}
+            </div>
+          </div>
+        `).join("");
+
+      return `
+        <section class="chapter">
+          <div class="flex items-start gap-4 mb-3">
+            <div class="chapter-num">${romanNum(d.day_index)}</div>
+            <div class="flex-1">
+              <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold">Day ${d.day_index} · ${escapeHtml(d.day_date || "")}</div>
+              <h3 class="text-2xl font-bold text-slate-800 mt-1">${escapeHtml(d.title || "")}</h3>
+              ${d.notes ? `<p class="text-sm text-slate-600 mt-2 whitespace-pre-wrap">${escapeHtml(d.notes)}</p>` : ""}
+            </div>
+          </div>
+          <div class="timeline">${itemsHtml}</div>
+        </section>
+      `;
+    }).join("");
+
+    return `
+      <div class="guide-magazine">
+        <!-- 顶部英雄区 -->
+        <div class="hero mb-6">
+          ${g.cover_image
+            ? `<img src="${escapeHtml(g.cover_image)}" class="w-full h-64 sm:h-80 object-cover" onerror="this.outerHTML='<div class=&quot;w-full h-64 sm:h-80 cover-gradient&quot;></div>'" />`
+            : `<div class="w-full h-64 sm:h-80 cover-gradient"></div>`}
+          <div class="hero-text">
+            <div class="text-xs uppercase tracking-widest text-purple-200 font-semibold mb-2">Travel Guide · 旅行攻略</div>
+            <h1 class="text-3xl sm:text-4xl font-extrabold leading-tight drop-shadow-lg">${escapeHtml(g.title)}</h1>
+            <div class="text-sm text-white/90 mt-2 flex flex-wrap gap-x-3 gap-y-1">
+              ${g.destination ? `<span>📍 ${escapeHtml(g.destination)}</span>` : ""}
+              ${g.start_date ? `<span>📅 ${escapeHtml(g.start_date)} → ${escapeHtml(g.end_date || "")}</span>` : ""}
+              <span>by ${escapeHtml(g.created_by_name || "")}</span>
+            </div>
+            ${g.tags ? `<div class="mt-3 flex flex-wrap gap-1">${g.tags.split(",").filter(Boolean).map(t => `<span class="text-xs px-2 py-0.5 rounded-full bg-white/20 backdrop-blur text-white">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
+          </div>
+        </div>
+
+        <!-- 摘要 -->
+        ${g.summary ? `
+          <div class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+            <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-2">关于这次旅行</div>
+            <p class="text-base text-slate-700 whitespace-pre-wrap leading-relaxed">${escapeHtml(g.summary)}</p>
+          </div>
+        ` : ""}
+
+        <!-- 数据 -->
+        <div class="grid grid-cols-3 gap-3 mb-6">
+          <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+            <div class="text-3xl font-extrabold text-purple-600">${days.length}</div>
+            <div class="text-xs text-slate-500 mt-1">天数</div>
+          </div>
+          <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+            <div class="text-3xl font-extrabold text-pink-500">${totalItems}</div>
+            <div class="text-xs text-slate-500 mt-1">安排条目</div>
+          </div>
+          <div class="bg-white rounded-xl p-4 text-center shadow-sm">
+            <div class="text-3xl">${g.trip_name ? "📚" : "👤"}</div>
+            <div class="text-xs text-slate-500 mt-1">${g.trip_name ? escapeHtml(g.trip_name) : "个人"}</div>
+          </div>
+        </div>
+
+        <!-- 目录 -->
+        ${days.length > 0 ? `
+          <div class="bg-white rounded-xl p-5 mb-6 shadow-sm">
+            <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-3">目录</div>
+            <ol class="space-y-1.5 text-sm text-slate-700">
+              ${days.map(d => `
+                <li class="flex items-baseline gap-3">
+                  <span class="text-purple-400 font-mono text-xs w-12">D${String(d.day_index).padStart(2, "0")}</span>
+                  <span class="flex-1">${escapeHtml(d.title || "(未命名)")}</span>
+                  <span class="text-xs text-slate-400">${d.items?.length || 0} 条</span>
+                </li>
+              `).join("")}
+            </ol>
+          </div>
+        ` : ""}
+
+        <!-- 章节 -->
+        <div class="text-xs uppercase tracking-wider text-purple-600 font-semibold mb-3">📖 详细行程</div>
+        ${days.length === 0
+          ? `<div class="text-center text-slate-400 py-12 bg-white rounded-xl">这本攻略还没有写日程</div>`
+          : chapterHtml}
+
+        <!-- 页脚 -->
+        <div class="mt-8 mb-4 text-center text-xs text-slate-400">
+          本攻略由 trip-share · 旅行共享 分享
+        </div>
+      </div>
+
+      <!-- 行动号召（不打印） -->
+      <div class="bg-gradient-to-r from-purple-600 to-pink-500 text-white rounded-2xl p-6 mt-8 text-center shadow-lg no-print">
+        <div class="text-2xl mb-2">🌴 喜欢这本攻略？</div>
+        <p class="text-sm text-white/90 mb-4">注册一个账号，自己也能做这么漂亮的旅行攻略</p>
+        <a href="/" class="inline-block px-6 py-2 bg-white text-purple-600 hover:bg-slate-100 rounded-lg text-sm font-bold">
+          我也要做 →
+        </a>
+      </div>
+    `;
+  }
+
+  // ---- boot ----
+  const token = getTokenFromUrl();
+  if (!token) {
+    renderNotFound("链接格式不正确");
+  } else {
+    loadPublicGuide(token);
+  }
+</script>
+
+</body>
+</html>

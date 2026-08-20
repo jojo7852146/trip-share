@@ -8,3 +8,5 @@ data/*.sqlite3
 .env
 .DS_Store
 *.egg-info/
+# User-uploaded images (never commit)
+static/uploads/
