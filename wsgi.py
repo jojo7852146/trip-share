@@ -1,5 +1,8 @@
 """gunicorn entry point for Render / production."""
 from server import app
+import db
+
+db.init_db()
 
 if __name__ == "__main__":
     import os
