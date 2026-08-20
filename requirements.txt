@@ -2,5 +2,5 @@ Flask==3.0.0
 Flask-Cors==4.0.0
 Werkzeug==3.0.1
 gunicorn==21.2.0
-# psycopg 3 (psycopg2-binary 2.9.x 不支持 Python 3.14；Render 默认 runtime 是 3.14)
-psycopg[binary]==3.2.3
+# psycopg 3 (pure-Python fallback; Render's Python 3.14 has no wheel for psycopg-binary 3.2.3)
+psycopg==3.2.3
