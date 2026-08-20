@@ -94,6 +94,19 @@ def index():
 def health():
     return jsonify({"ok": True, "service": "trip-share", "ts": datetime.now().isoformat()})
 
+
+@app.route("/_debug/env")
+def debug_env():
+    """Debug endpoint to verify env vars (no secrets exposed)."""
+    url = os.environ.get("DATABASE_URL", "")
+    return jsonify({
+        "database_url_set": bool(url),
+        "database_url_prefix": url.split("://")[0] if "://" in url else "(invalid format)",
+        "database_url_host": (url.split("@")[1].split(":")[0] if "@" in url and "://" in url else "(missing)"),
+        "secret_key_set": bool(os.environ.get("SECRET_KEY")),
+        "python_version": os.sys.version,
+    })
+
 # --- Auth -----------------------------------------------------------------
 
 @app.route("/api/register", methods=["POST"])
