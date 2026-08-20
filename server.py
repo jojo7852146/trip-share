@@ -97,15 +97,28 @@ def health():
 
 @app.route("/_debug/env")
 def debug_env():
-    """Debug endpoint to verify env vars (no secrets exposed)."""
+    """Debug endpoint to verify env vars and DB connectivity."""
     url = os.environ.get("DATABASE_URL", "")
-    return jsonify({
+    result = {
         "database_url_set": bool(url),
         "database_url_prefix": url.split("://")[0] if "://" in url else "(invalid format)",
         "database_url_host": (url.split("@")[1].split(":")[0] if "@" in url and "://" in url else "(missing)"),
         "secret_key_set": bool(os.environ.get("SECRET_KEY")),
         "python_version": os.sys.version,
-    })
+    }
+    # Try to connect to DB
+    try:
+        import db
+        with db.get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 AS ok")
+                row = cur.fetchone()
+                result["db_connect"] = "OK"
+                result["db_query"] = dict(row)
+    except Exception as e:
+        result["db_connect"] = "FAILED"
+        result["db_error"] = str(e)
+    return jsonify(result)
 
 # --- Auth -----------------------------------------------------------------
 
