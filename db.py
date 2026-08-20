@@ -41,7 +41,7 @@ def to_jsonable(obj):
 
 # --- Connection -----------------------------------------------------------
 
-def _connect():
+def _connect(max_retries=3, base_delay=1.0):
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(
@@ -52,8 +52,18 @@ def _connect():
     # Render sometimes uses the legacy `postgres://` scheme.
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
-    conn = psycopg.connect(url, row_factory=dict_row)
-    return conn
+
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            conn = psycopg.connect(url, row_factory=dict_row)
+            return conn
+        except psycopg.OperationalError as e:
+            last_exc = e
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(base_delay * (2 ** attempt))
+    raise last_exc
 
 
 @contextmanager

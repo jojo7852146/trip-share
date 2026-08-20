@@ -29,6 +29,24 @@ db = _db  # callers use db.*; alias so the rest of the file is unchanged
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app, supports_credentials=True)
 
+# Deferred DB init: on Render the Postgres DNS may not be ready when
+# gunicorn imports wsgi.py, so we initialize tables on the first request.
+_db_initialized = False
+
+@app.before_request
+def _ensure_db_tables():
+    global _db_initialized
+    if _db_initialized:
+        return
+    try:
+        db.init_db()
+        _db_initialized = True
+        app.logger.info("Database tables initialized.")
+    except Exception:
+        # Don't crash the request; next request will retry.
+        app.logger.warning("DB init deferred (will retry on next request)", exc_info=True)
+
+
 # Simple in-memory token store: {token: user_id}. (Restart = logout everyone)
 TOKENS = {}
 
