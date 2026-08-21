@@ -378,8 +378,9 @@ def list_wishlist(trip_id):
 def add_wishlist(trip_id):
     data = request.json or {}
     title = (data.get("title") or "").strip()
+    # 允许用户只填说明/分类，title 为空时自动兜底
     if not title:
-        return jsonify({"ok": False, "error": "标题不能为空"}), 400
+        title = (data.get("description") or "").strip()[:20] or (data.get("category") or "").strip() or "未命名"
     with db.get_db() as conn:
         wid = db.add_wishlist(
             conn, trip_id, title,
@@ -421,8 +422,9 @@ def list_itinerary(trip_id):
 def add_itinerary(trip_id):
     data = request.json or {}
     title = (data.get("title") or "").strip()
+    # title 兜底：用说明或地点名或"未命名"
     if not title:
-        return jsonify({"ok": False, "error": "标题不能为空"}), 400
+        title = (data.get("description") or "").strip()[:20] or (data.get("location") or "").strip() or "未命名"
     with db.get_db() as conn:
         iid = db.add_itinerary(
             conn, trip_id,
@@ -765,8 +767,9 @@ def add_guide_item(guide_id, day_id):
             return jsonify({"ok": False, "error": "无权编辑该攻略"}), 403
         data = request.json or {}
         title = (data.get("title") or "").strip()
+        # title 兜底：用说明或地点名或分类或"未命名"
         if not title:
-            return jsonify({"ok": False, "error": "条目标题不能为空"}), 400
+            title = (data.get("description") or "").strip()[:20] or (data.get("location") or "").strip() or (data.get("category") or "").strip() or "未命名"
         iid = db.create_guide_item(
             conn, day_id,
             data.get("time") or "",

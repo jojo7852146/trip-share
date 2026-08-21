@@ -1966,6 +1966,10 @@ function showWishlistForm() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const body = Object.fromEntries(fd.entries());
+    // 标题没填时自动用说明前 20 字兜底
+    if (!body.title || !body.title.trim()) {
+      body.title = (body.description || "").trim().slice(0, 20) || body.category || "未命名";
+    }
     try {
       await api(`/api/trips/${state.currentTrip.id}/wishlist`, { method: "POST", body: JSON.stringify(body) });
       closeModal();
