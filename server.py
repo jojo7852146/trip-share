@@ -152,7 +152,7 @@ def debug_env():
                 cur.execute("SELECT 1 AS ok")
                 row = cur.fetchone()
                 result["db_connect"] = "OK"
-                result["db_query"] = dict(row)
+                result["db_query"] = {"ok": row[0]}
         finally:
             conn.close()
     except Exception as e:
