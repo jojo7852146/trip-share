@@ -53,11 +53,15 @@ def _connect(max_retries=12, base_delay=1.5, max_delay=20.0):
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
 
+    # Render external connection strings require SSL.
+    # psycopg 3 accepts sslmode via connect() kwargs.
+    conn_kwargs = {"row_factory": dict_row, "sslmode": "require"}
+
     last_exc = None
     import time
     for attempt in range(max_retries):
         try:
-            conn = psycopg.connect(url, row_factory=dict_row)
+            conn = psycopg.connect(url, **conn_kwargs)
             if attempt > 0:
                 print(f"[db] Connected to database after {attempt + 1} attempts.")
             return conn
