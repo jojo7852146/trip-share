@@ -267,6 +267,20 @@ def get_trip(trip_id):
         members = db.list_trip_members(conn, trip_id)
         return jsonify({"ok": True, "trip": trip, "members": members})
 
+@app.route("/api/trips/<int:trip_id>", methods=["DELETE"])
+@require_auth
+def delete_trip(trip_id):
+    """删除旅行（仅创建者可删）。所有子数据靠 ON DELETE CASCADE 自动清理。"""
+    with db.get_db() as conn:
+        trip = db.get_trip_by_id(conn, trip_id)
+        if not trip:
+            return jsonify({"ok": False, "error": "旅行不存在"}), 404
+        if trip["owner_id"] != request.user_id:
+            return jsonify({"ok": False, "error": "只有创建者才能删除该旅行"}), 403
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM trips WHERE id=%s", (trip_id,))
+        return jsonify({"ok": True, "message": "旅行已删除"})
+
 @app.route("/api/trips/join", methods=["POST"])
 @require_auth
 def join_trip():

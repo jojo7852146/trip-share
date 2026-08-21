@@ -1639,7 +1639,12 @@ function renderTripListView() {
               ? `<img src="${escapeHtml(t.cover_image)}" class="w-full img-thumb" onerror="this.style.display='none'" />`
               : `<div class="w-full img-thumb bg-gradient-to-br from-indigo-200 to-emerald-200 flex items-center justify-center text-5xl">✈️</div>`}
             <div class="p-4">
-              <h3 class="font-bold text-slate-800 text-lg">${escapeHtml(t.name)}</h3>
+              <div class="flex items-start justify-between gap-2">
+                <h3 class="font-bold text-slate-800 text-lg">${escapeHtml(t.name)}</h3>
+                ${t.role === "owner"
+                  ? `<button onclick="event.stopPropagation(); deleteTrip(${t.id})" title="删除旅行" class="shrink-0 text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded-lg hover:bg-red-50 border border-transparent hover:border-red-200">🗑️ 删除</button>`
+                  : ""}
+              </div>
               <p class="text-sm text-slate-500 mt-1">
                 ${escapeHtml(t.start_date || "未设定")} → ${escapeHtml(t.end_date || "未设定")}
               </p>
@@ -1673,6 +1678,24 @@ function renderTripListView() {
 async function enterTrip(id) {
   await loadTrip(id);
   renderApp();
+}
+
+async function deleteTrip(id) {
+  const trip = state.trips.find(x => x.id === id);
+  const name = trip ? `「${trip.name}」` : "这个旅行";
+  if (!confirm(`确定删除${name}吗？\n\n旅行内的行程、酒店、集合点、费用、攻略等所有数据都会被一并删除，且无法恢复！`)) return;
+  try {
+    await api(`/api/trips/${id}`, { method: "DELETE" });
+    toast("旅行已删除", "success");
+    state.trips = state.trips.filter(x => x.id !== id);
+    if (state.currentTrip && state.currentTrip.id === id) {
+      state.currentTrip = null;
+      localStorage.removeItem(LS_TRIP_ID);
+    }
+    renderApp();
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
 function showCreateTripModal() {
