@@ -55,19 +55,22 @@ def _ensure_db_tables():
         app.logger.warning("DB init deferred (will retry on next request)", exc_info=True)
 
 
-# Simple in-memory token store: {token: user_id}. (Restart = logout everyone)
-TOKENS = {}
-
+# Token persisted in DB so it survives server restarts (Render free plan
+# spins down after idle, clearing in-memory state).
 def new_token(user_id):
     t = secrets.token_urlsafe(32)
-    TOKENS[t] = user_id
+    with db.get_db() as conn:
+        db.set_user_token(conn, user_id, t)
     return t
 
 def get_token_user_id():
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         token = auth[7:]
-        return TOKENS.get(token)
+        with db.get_db() as conn:
+            user = db.get_user_by_token(conn, token)
+            if user:
+                return user["id"]
     return None
 
 def require_auth(f):

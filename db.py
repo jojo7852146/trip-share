@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     display_name TEXT,
+    token TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -275,6 +276,8 @@ def init_db():
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA)
+            # Migration: add token column for existing tables (before schema included it)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token TEXT;")
     print("[db] schema applied.")
 
 
@@ -299,6 +302,17 @@ def get_user_by_username(conn, username):
 def get_user_by_id(conn, user_id):
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
+        return cur.fetchone()
+
+
+def set_user_token(conn, user_id, token):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE users SET token=%s WHERE id=%s", (token, user_id))
+
+
+def get_user_by_token(conn, token):
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM users WHERE token=%s", (token,))
         return cur.fetchone()
 
 
