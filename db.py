@@ -41,7 +41,7 @@ def to_jsonable(obj):
 
 # --- Connection -----------------------------------------------------------
 
-def _connect(max_retries=20, base_delay=2.0, max_delay=30.0):
+def _connect(max_retries=12, base_delay=1.5, max_delay=20.0):
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(

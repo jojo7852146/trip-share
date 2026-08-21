@@ -31,12 +31,20 @@ CORS(app, supports_credentials=True)
 
 # Deferred DB init: on Render the Postgres DNS may not be ready when
 # gunicorn imports wsgi.py, so we initialize tables on the first request.
+# /health and /_debug/env must NEVER trigger DB init — the health check
+# needs to return instantly or Render keeps the deploy "Deploying".
 _db_initialized = False
+
+def _skip_db_path():
+    path = request.path
+    return path in ("/health", "/_debug/env") or path.startswith("/static") or path == "/"
 
 @app.before_request
 def _ensure_db_tables():
     global _db_initialized
     if _db_initialized:
+        return
+    if _skip_db_path():
         return
     try:
         db.init_db()
@@ -99,14 +107,33 @@ def health():
 def debug_env():
     """Debug endpoint to verify env vars and DB connectivity."""
     url = os.environ.get("DATABASE_URL", "")
+    # Parse host correctly (strip port and database name)
+    host = "(missing)"
+    dbname = "(missing)"
+    if url and "@" in url and "://" in url:
+        authority = url.split("@")[1]
+        # authority = host[:port]/dbname
+        host = authority.split(":")[0].split("/")[0]
+        if "/" in authority:
+            dbname = authority.split("/")[1].split("?")[0]
     result = {
         "database_url_set": bool(url),
         "database_url_prefix": url.split("://")[0] if "://" in url else "(invalid format)",
-        "database_url_host": (url.split("@")[1].split(":")[0] if "@" in url and "://" in url else "(missing)"),
+        "database_url_host": host,
+        "database_url_dbname": dbname,
         "secret_key_set": bool(os.environ.get("SECRET_KEY")),
         "python_version": os.sys.version,
     }
-    # Try to connect to DB
+    # Test DNS resolution of the host separately from the full connect
+    try:
+        import socket
+        infos = socket.getaddrinfo(host, None)
+        result["dns_resolve"] = "OK"
+        result["dns_resolved_to"] = [i[4][0] for i in infos][:3]
+    except Exception as e:
+        result["dns_resolve"] = "FAILED"
+        result["dns_error"] = str(e)
+    # Try to connect to DB (bounded: _connect retries are capped)
     try:
         import db
         with db.get_db() as conn:
