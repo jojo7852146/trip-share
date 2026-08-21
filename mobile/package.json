@@ -1,0 +1,13 @@
+{
+  "name": "trip-share-mobile",
+  "version": "1.0.0",
+  "description": "旅行分享 - 安卓壳应用",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/core": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}
