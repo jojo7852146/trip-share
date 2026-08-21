@@ -305,7 +305,7 @@ def regenerate_invite(trip_id):
         if not db.is_trip_member(conn, trip_id, request.user_id):
             return jsonify({"ok": False, "error": "无权限"}), 403
         new_code = db.generate_invite_code()
-        conn.execute("UPDATE trips SET invite_code=? WHERE id=?", (new_code, trip_id))
+        conn.execute("UPDATE trips SET invite_code=%s WHERE id=%s", (new_code, trip_id))
         return jsonify({"ok": True, "invite_code": new_code})
 
 # --- Expense groups -------------------------------------------------------
@@ -391,7 +391,7 @@ def add_wishlist(trip_id):
             request.user_id
         )
         # 回填
-        rows = conn.execute("SELECT * FROM wishlist WHERE id=?", (wid,)).fetchone()
+        rows = conn.execute("SELECT * FROM wishlist WHERE id=%s", (wid,)).fetchone()
         item = dict(rows)
         return jsonify({"ok": True, "item": item})
 
@@ -400,7 +400,7 @@ def add_wishlist(trip_id):
 def delete_wishlist(item_id):
     with db.get_db() as conn:
         # 找到 trip_id 校验权限
-        row = conn.execute("SELECT trip_id FROM wishlist WHERE id=?", (item_id,)).fetchone()
+        row = conn.execute("SELECT trip_id FROM wishlist WHERE id=%s", (item_id,)).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "项目不存在"}), 404
         if not db.is_trip_member(conn, row["trip_id"], request.user_id):
@@ -439,7 +439,7 @@ def add_itinerary(trip_id):
             data.get("image_url") or "",
             request.user_id
         )
-        row = conn.execute("SELECT * FROM itinerary WHERE id=?", (iid,)).fetchone()
+        row = conn.execute("SELECT * FROM itinerary WHERE id=%s", (iid,)).fetchone()
         item = dict(row)
         return jsonify({"ok": True, "item": item})
 
@@ -447,7 +447,7 @@ def add_itinerary(trip_id):
 @require_auth
 def delete_itinerary(item_id):
     with db.get_db() as conn:
-        row = conn.execute("SELECT trip_id FROM itinerary WHERE id=?", (item_id,)).fetchone()
+        row = conn.execute("SELECT trip_id FROM itinerary WHERE id=%s", (item_id,)).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "项目不存在"}), 404
         if not db.is_trip_member(conn, row["trip_id"], request.user_id):
@@ -483,7 +483,7 @@ def add_hotel(trip_id):
             data.get("notes") or "",
             data.get("url") or ""
         )
-        row = conn.execute("SELECT * FROM hotels WHERE id=?", (hid,)).fetchone()
+        row = conn.execute("SELECT * FROM hotels WHERE id=%s", (hid,)).fetchone()
         item = dict(row)
         return jsonify({"ok": True, "item": item})
 
@@ -491,7 +491,7 @@ def add_hotel(trip_id):
 @require_auth
 def delete_hotel(hotel_id):
     with db.get_db() as conn:
-        row = conn.execute("SELECT trip_id FROM hotels WHERE id=?", (hotel_id,)).fetchone()
+        row = conn.execute("SELECT trip_id FROM hotels WHERE id=%s", (hotel_id,)).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "酒店不存在"}), 404
         if not db.is_trip_member(conn, row["trip_id"], request.user_id):
@@ -524,7 +524,7 @@ def add_meeting(trip_id):
             data.get("notes") or "",
             request.user_id
         )
-        row = conn.execute("SELECT * FROM meeting_points WHERE id=?", (mid,)).fetchone()
+        row = conn.execute("SELECT * FROM meeting_points WHERE id=%s", (mid,)).fetchone()
         item = dict(row)
         return jsonify({"ok": True, "item": item})
 
@@ -532,7 +532,7 @@ def add_meeting(trip_id):
 @require_auth
 def delete_meeting(meeting_id):
     with db.get_db() as conn:
-        row = conn.execute("SELECT trip_id FROM meeting_points WHERE id=?", (meeting_id,)).fetchone()
+        row = conn.execute("SELECT trip_id FROM meeting_points WHERE id=%s", (meeting_id,)).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "集合点不存在"}), 404
         if not db.is_trip_member(conn, row["trip_id"], request.user_id):
@@ -577,7 +577,7 @@ def add_expense(trip_id):
             data.get("description") or "",
             data.get("expense_date") or date.today().isoformat()
         )
-        row = conn.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+        row = conn.execute("SELECT * FROM expenses WHERE id=%s", (eid,)).fetchone()
         item = dict(row)
         return jsonify({"ok": True, "item": item})
 
@@ -585,7 +585,7 @@ def add_expense(trip_id):
 @require_auth
 def delete_expense(expense_id):
     with db.get_db() as conn:
-        row = conn.execute("SELECT trip_id FROM expenses WHERE id=?", (expense_id,)).fetchone()
+        row = conn.execute("SELECT trip_id FROM expenses WHERE id=%s", (expense_id,)).fetchone()
         if not row:
             return jsonify({"ok": False, "error": "费用不存在"}), 404
         if not db.is_trip_member(conn, row["trip_id"], request.user_id):
