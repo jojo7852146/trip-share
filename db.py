@@ -67,7 +67,9 @@ def _get_pool(max_retries=12, base_delay=1.5, max_delay=20.0):
         url = url.replace("postgres://", "postgresql://", 1)
 
     # Render external connection strings require SSL.
-    conn_kwargs = {"row_factory": dict_row, "sslmode": "require"}
+    # For local/self-hosted Postgres (no SSL), set DB_SSLMODE=disable.
+    sslmode = os.environ.get("DB_SSLMODE", "require")
+    conn_kwargs = {"row_factory": dict_row, "sslmode": sslmode}
 
     import time
     last_exc = None
