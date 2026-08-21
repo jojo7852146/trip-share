@@ -105,7 +105,12 @@ def health():
 
 @app.route("/_debug/env")
 def debug_env():
-    """Debug endpoint to verify env vars and DB connectivity."""
+    """Debug endpoint to verify env vars and DB connectivity.
+
+    Must return FAST (<=5s): uses a single connection attempt with a short
+    connect_timeout and NO retries, otherwise this page spins for minutes
+    and the user thinks the site is down.
+    """
     url = os.environ.get("DATABASE_URL", "")
     # Parse host correctly (strip port and database name)
     host = "(missing)"
@@ -117,6 +122,7 @@ def debug_env():
         if "/" in authority:
             dbname = authority.split("/")[1].split("?")[0]
     result = {
+        "app_version": "2026-08-21-6fbe249",
         "database_url_set": bool(url),
         "database_url_prefix": url.split("://")[0] if "://" in url else "(invalid format)",
         "database_url_host": host,
@@ -133,18 +139,25 @@ def debug_env():
     except Exception as e:
         result["dns_resolve"] = "FAILED"
         result["dns_error"] = str(e)
-    # Try to connect to DB (bounded: _connect retries are capped)
+    # Fast DB probe: single attempt, 5s connect timeout, no retries.
+    # Uses the same sslmode=require as db._connect().
     try:
-        import db
-        with db.get_db() as conn:
+        import psycopg
+        probe_url = url
+        if probe_url.startswith("postgres://"):
+            probe_url = probe_url.replace("postgres://", "postgresql://", 1)
+        conn = psycopg.connect(probe_url, connect_timeout=5, sslmode="require")
+        try:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1 AS ok")
                 row = cur.fetchone()
                 result["db_connect"] = "OK"
                 result["db_query"] = dict(row)
+        finally:
+            conn.close()
     except Exception as e:
         result["db_connect"] = "FAILED"
-        result["db_error"] = str(e)
+        result["db_error"] = f"{type(e).__name__}: {e}"
     return jsonify(result)
 
 # --- Auth -----------------------------------------------------------------
