@@ -41,7 +41,7 @@ def to_jsonable(obj):
 
 # --- Connection -----------------------------------------------------------
 
-def _connect(max_retries=3, base_delay=1.0):
+def _connect(max_retries=20, base_delay=2.0, max_delay=30.0):
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(
@@ -54,15 +54,21 @@ def _connect(max_retries=3, base_delay=1.0):
         url = url.replace("postgres://", "postgresql://", 1)
 
     last_exc = None
+    import time
     for attempt in range(max_retries):
         try:
             conn = psycopg.connect(url, row_factory=dict_row)
+            if attempt > 0:
+                print(f"[db] Connected to database after {attempt + 1} attempts.")
             return conn
         except psycopg.OperationalError as e:
             last_exc = e
             if attempt < max_retries - 1:
-                import time
-                time.sleep(base_delay * (2 ** attempt))
+                wait = min(base_delay * (2 ** attempt), max_delay)
+                print(f"[db] DB connection attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"[db] DB connection failed after {max_retries} attempts: {e}")
     raise last_exc
 
 
