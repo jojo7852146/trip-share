@@ -23,6 +23,7 @@ from contextlib import contextmanager
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 # Backwards-compat alias so old `cur.fetchone()["id"]` style keeps working.
 psycopg2 = psycopg
@@ -41,7 +42,19 @@ def to_jsonable(obj):
 
 # --- Connection -----------------------------------------------------------
 
-def _connect(max_retries=12, base_delay=1.5, max_delay=20.0):
+_pool = None
+
+def _get_pool(max_retries=12, base_delay=1.5, max_delay=20.0):
+    """Lazily create (once) a shared connection pool with retry-on-DNS logic.
+
+    Render free instances are spun down after ~15 min idle; the first request
+    after a cold start may still find Postgres DNS settling. Retrying the pool
+    open covers that, while subsequent requests reuse warm connections.
+    """
+    global _pool
+    if _pool is not None:
+        return _pool
+
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError(
@@ -54,25 +67,33 @@ def _connect(max_retries=12, base_delay=1.5, max_delay=20.0):
         url = url.replace("postgres://", "postgresql://", 1)
 
     # Render external connection strings require SSL.
-    # psycopg 3 accepts sslmode via connect() kwargs.
     conn_kwargs = {"row_factory": dict_row, "sslmode": "require"}
 
-    last_exc = None
     import time
+    last_exc = None
     for attempt in range(max_retries):
         try:
-            conn = psycopg.connect(url, **conn_kwargs)
+            pool = ConnectionPool(
+                url,
+                min_size=1,
+                max_size=4,
+                open=False,  # defer real connections until .open()
+                kwargs=conn_kwargs,
+                timeout=10,
+            )
+            pool.open(wait=True, timeout=10)
+            _pool = pool
             if attempt > 0:
-                print(f"[db] Connected to database after {attempt + 1} attempts.")
-            return conn
-        except psycopg.OperationalError as e:
+                print(f"[db] Pool ready after {attempt + 1} attempts.")
+            return _pool
+        except Exception as e:
             last_exc = e
             if attempt < max_retries - 1:
                 wait = min(base_delay * (2 ** attempt), max_delay)
-                print(f"[db] DB connection attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait}s...")
+                print(f"[db] Pool open attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {wait}s...")
                 time.sleep(wait)
             else:
-                print(f"[db] DB connection failed after {max_retries} attempts: {e}")
+                print(f"[db] Pool open failed after {max_retries} attempts: {e}")
     raise last_exc
 
 
@@ -85,15 +106,14 @@ def get_db():
     `conn` is a psycopg connection with dict cursors. All writes are committed
     on context exit; rolled back on exception.
     """
-    conn = _connect()
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    pool = _get_pool()
+    with pool.connection() as conn:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 # --- Schema ---------------------------------------------------------------
